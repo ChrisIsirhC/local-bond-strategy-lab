@@ -1,0 +1,79 @@
+from __future__ import annotations
+
+import json
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any
+
+from strategies.dashboard_signal_v1 import DashboardThresholds, DashboardWeights
+from strategies.position_policy import DashboardPositionPolicy
+
+
+CONFIG_DIR = Path("configs")
+
+
+@dataclass(frozen=True)
+class ObjectiveConfig:
+    total_return_weight: float = 0.0
+    excess_return_weight: float = 0.0
+    sharpe_weight: float = 0.0
+    max_drawdown_penalty: float = 0.0
+    signal_win_rate_weight: float = 0.0
+    capital_gain_bp_weight: float = 1.0
+    capital_gain_excess_bp_weight: float = 0.25
+    capital_trade_win_rate_weight: float = 10.0
+    capital_gain_drawdown_bp_penalty: float = 0.0
+
+    def as_dict(self) -> dict[str, float]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class DashboardStrategyConfig:
+    name: str
+    weights: DashboardWeights
+    thresholds: DashboardThresholds
+    positions: DashboardPositionPolicy
+    objective: ObjectiveConfig
+    backtest_start: str | None = None
+    backtest_end: str | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "weights": self.weights.as_dict(),
+            "thresholds": self.thresholds.as_dict(),
+            "positions": self.positions.as_dict(),
+            "objective": self.objective.as_dict(),
+            "backtest": {
+                "start_date": self.backtest_start,
+                "end_date": self.backtest_end,
+            },
+        }
+
+
+def load_strategy_config(path: Path) -> DashboardStrategyConfig:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return strategy_config_from_dict(raw)
+
+
+def save_strategy_config(config: DashboardStrategyConfig, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(config.as_dict(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def strategy_config_from_dict(raw: dict[str, Any]) -> DashboardStrategyConfig:
+    backtest = raw.get("backtest", {})
+    return DashboardStrategyConfig(
+        name=str(raw.get("name", "dashboard_signal_config")),
+        weights=DashboardWeights(**_float_dict(raw.get("weights", {}))),
+        thresholds=DashboardThresholds(**_float_dict(raw.get("thresholds", {}))),
+        positions=DashboardPositionPolicy(**raw.get("positions", {})),
+        objective=ObjectiveConfig(**_float_dict(raw.get("objective", {}))),
+        backtest_start=backtest.get("start_date"),
+        backtest_end=backtest.get("end_date"),
+    )
+
+
+def _float_dict(raw: dict[str, Any]) -> dict[str, float]:
+    return {str(key): float(value) for key, value in raw.items()}

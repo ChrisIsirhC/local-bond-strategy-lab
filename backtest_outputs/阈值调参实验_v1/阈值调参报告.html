@@ -1,0 +1,3333 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>地方债阈值调参实验</title><script src="https://assets.pyecharts.org/assets/v5/echarts.js"></script>
+<style>
+body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHei",sans-serif}main{max-width:1280px;margin:auto;padding:48px 28px 80px}h1{font-size:38px;margin:0 0 14px}h2{margin-top:52px}h3{margin:28px 0 12px}.lead{color:#66716c;max-width:980px;line-height:1.8}.metrics{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid #cfd5d1;border-bottom:1px solid #cfd5d1;margin:30px 0}.metric{padding:22px 18px;border-right:1px solid #cfd5d1}.metric:last-child{border:0}.metric b{display:block;font-size:25px;color:#bb654f;margin-top:8px}.chart{background:#fbfaf6;margin:18px 0;padding:12px;border-radius:4px}.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#d9ddd8;border:1px solid #d9ddd8}.step{background:#fbfaf6;padding:18px;line-height:1.65}.step b{display:block;color:#176b5b;margin-bottom:8px}.callout{border-left:4px solid #bb654f;background:#fbfaf6;padding:18px 22px;line-height:1.8}table{border-collapse:collapse;width:100%;font-size:12px;background:#fbfaf6}th,td{padding:8px;border-bottom:1px solid #d9ddd8;text-align:left;white-space:nowrap}th{background:#e8ece8;color:#176b5b;position:sticky;top:0}.table-wrap{overflow-x:auto;overflow-y:visible;border:1px solid #d9ddd8}code{color:#176b5b}@media(max-width:800px){.metrics,.steps{grid-template-columns:1fr 1fr}}
+</style></head><body><main>
+<h1>10Y地方债策略：阈值调参实验</h1>
+<p class="lead">本报告是本次阈值研究的唯一说明文件。实验使用网页所选基线的九因子权重和多/中/空仓位，只检验定性分界、看空总分门槛和看空确认条件，并以资本利得BP和逐笔胜率为主评价。</p>
+<div class="metrics"><div class="metric">候选组合<b>82</b></div><div class="metric">累计资本利得<b>245.99 BP</b></div><div class="metric">资本利得超额<b>283.14 BP</b></div><div class="metric">逐笔胜率<b>100.00%</b></div></div>
+<h2>实验设计</h2>
+<div class="steps"><div class="step"><b>1. 单模块敏感性</b>分位阈值测试15/85至35/65，利差变化按0.5BP生成候选。</div><div class="step"><b>2. 看空总分</b>测试15至40；多/中/空仓位沿用所选基线。</div><div class="step"><b>3. 确认规则</b>测试模块数量、供需确认和连续两周确认。</div><div class="step"><b>4. 有限交叉</b>只对最敏感的两个模块组合，避免全参数暴力过拟合。</div></div>
+<h3>固定权重</h3><div class="table-wrap"><table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>因子</th>
+      <th>固定权重</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>supply_amount</td>
+      <td>10.0</td>
+    </tr>
+    <tr>
+      <td>supply_ratio</td>
+      <td>10.0</td>
+    </tr>
+    <tr>
+      <td>supply_long</td>
+      <td>10.0</td>
+    </tr>
+    <tr>
+      <td>fly_penalty</td>
+      <td>-30.0</td>
+    </tr>
+    <tr>
+      <td>bank_demand</td>
+      <td>20.0</td>
+    </tr>
+    <tr>
+      <td>spread_gov</td>
+      <td>25.0</td>
+    </tr>
+    <tr>
+      <td>spread_change</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>spread_ncd</td>
+      <td>5.0</td>
+    </tr>
+    <tr>
+      <td>nonbank_sentiment</td>
+      <td>20.0</td>
+    </tr>
+  </tbody>
+</table></div>
+<h2>绩效对照</h2><div class="table-wrap"><table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>指标</th>
+      <th>原始阈值基线</th>
+      <th>最佳方案</th>
+      <th>长期持有基准</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>累计资本利得</td>
+      <td>250.28 BP</td>
+      <td>245.99 BP</td>
+      <td>-37.15 BP</td>
+    </tr>
+    <tr>
+      <td>资本利得交易胜率</td>
+      <td>100.00%</td>
+      <td>100.00%</td>
+      <td>暂无已平仓</td>
+    </tr>
+    <tr>
+      <td>平均单笔资本利得</td>
+      <td>25.03 BP</td>
+      <td>27.33 BP</td>
+      <td>nan BP</td>
+    </tr>
+    <tr>
+      <td>最差交易</td>
+      <td>4.29 BP</td>
+      <td>5.38 BP</td>
+      <td>nan BP</td>
+    </tr>
+    <tr>
+      <td>资本利得最大回撤</td>
+      <td>-30.72 BP</td>
+      <td>-22.46 BP</td>
+      <td>-300.23 BP</td>
+    </tr>
+    <tr>
+      <td>累计收益</td>
+      <td>2.99%</td>
+      <td>2.90%</td>
+      <td>2.54%</td>
+    </tr>
+    <tr>
+      <td>年化收益</td>
+      <td>2.09%</td>
+      <td>2.03%</td>
+      <td>1.78%</td>
+    </tr>
+    <tr>
+      <td>最大回撤</td>
+      <td>-0.28%</td>
+      <td>-0.22%</td>
+      <td>-2.76%</td>
+    </tr>
+    <tr>
+      <td>夏普比率</td>
+      <td>0.853</td>
+      <td>0.818</td>
+      <td>0.182</td>
+    </tr>
+    <tr>
+      <td>调仓周期胜率</td>
+      <td>15.79%</td>
+      <td>14.47%</td>
+      <td>65.79%</td>
+    </tr>
+  </tbody>
+</table></div>
+<h2>研究结论</h2><div class="callout"><strong>部分定性阈值在资本利得BP目标下发生变化，具体差异见下表。</strong> 当前看空规则为：总分低于 30，至少 0 个核心模块利空，不额外要求供给或需求确认，连续确认 1 周。</div>
+<h3>最佳参数与原始参数</h3><div class="table-wrap"><table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>参数</th>
+      <th>原始</th>
+      <th>最佳</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>供给分位</td>
+      <td>25/75</td>
+      <td>25/75</td>
+    </tr>
+    <tr>
+      <td>银行需求分位</td>
+      <td>25/75</td>
+      <td>30/70</td>
+    </tr>
+    <tr>
+      <td>地方债-国债利差分位</td>
+      <td>20/80</td>
+      <td>20/80</td>
+    </tr>
+    <tr>
+      <td>地方债-NCD利差分位</td>
+      <td>25/75</td>
+      <td>25/75</td>
+    </tr>
+    <tr>
+      <td>利差周变化</td>
+      <td>±2BP</td>
+      <td>±2BP</td>
+    </tr>
+    <tr>
+      <td>看空总分</td>
+      <td><30</td>
+      <td><30</td>
+    </tr>
+    <tr>
+      <td>最少利空模块</td>
+      <td>0</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <td>必须包含供给或需求利空</td>
+      <td>否</td>
+      <td>否</td>
+    </tr>
+    <tr>
+      <td>连续确认周数</td>
+      <td>1</td>
+      <td>1</td>
+    </tr>
+  </tbody>
+</table></div>
+<p class="lead">最佳候选来源：<code>单模块敏感性 / 银行需求分位阈值 / 30/70</code>。本次目标函数为 0.25 × 累计资本利得BP + 0 × 资本利得超额BP + 100 × 已平仓交易胜率 + 1 × 资本利得回撤BP + 0 × 累计收益 + 0 × 超额收益 + 0 × 夏普 + 0 × 最大回撤 + 0 × 调仓周期胜率。</p>
+<h2>实际改变的调仓周期</h2><p class="lead">最佳方案相对原始阈值共有 1 个周期改变仓位。正改善代表新规则提高了该笔交易的资本利得BP。</p><div class="table-wrap"><table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>信号日期</th>
+      <th>基线仓位</th>
+      <th>基线策略资本利得_BP</th>
+      <th>基线基准资本利得_BP</th>
+      <th>基线资本利得超额_BP</th>
+      <th>基线资本利得判断类型</th>
+      <th>最优仓位</th>
+      <th>最优策略资本利得_BP</th>
+      <th>最优资本利得超额_BP</th>
+      <th>最优资本利得判断类型</th>
+      <th>仓位是否变化</th>
+      <th>资本利得判断是否变化</th>
+      <th>资本利得改善_BP</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>2025-09-01</td>
+      <td>1.0</td>
+      <td>4.29</td>
+      <td>4.29</td>
+      <td>0.00</td>
+      <td>有效进攻</td>
+      <td>0.0</td>
+      <td>0.00</td>
+      <td>-4.29</td>
+      <td>低仓少吃</td>
+      <td>是</td>
+      <td>是</td>
+      <td>-4.29</td>
+    </tr>
+  </tbody>
+</table></div>
+<h2>单模块敏感性</h2><div class="table-wrap"><table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>模块</th>
+      <th>最佳候选</th>
+      <th>建议</th>
+      <th>最佳目标函数</th>
+      <th>最佳累计收益率</th>
+      <th>最佳超额收益率</th>
+      <th>最佳累计资本利得_BP</th>
+      <th>最佳资本利得超额_BP</th>
+      <th>最佳资本利得交易胜率</th>
+      <th>相对原始阈值改善</th>
+      <th>目标函数敏感区间</th>
+      <th>收益率敏感区间</th>
+      <th>资本利得敏感区间_BP</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>地方债国债利差阈值</td>
+      <td>20/80</td>
+      <td>保留原始阈值</td>
+      <td>131.8474</td>
+      <td>2.99%</td>
+      <td>0.45%</td>
+      <td>250.28</td>
+      <td>287.43</td>
+      <td>100.00%</td>
+      <td>0.0000</td>
+      <td>89.6720</td>
+      <td>1.19%</td>
+      <td>103.51</td>
+    </tr>
+    <tr>
+      <td>银行需求分位阈值</td>
+      <td>30/70</td>
+      <td>采用候选阈值</td>
+      <td>139.0389</td>
+      <td>2.90%</td>
+      <td>0.36%</td>
+      <td>245.99</td>
+      <td>283.14</td>
+      <td>100.00%</td>
+      <td>7.1915</td>
+      <td>52.5770</td>
+      <td>1.30%</td>
+      <td>119.98</td>
+    </tr>
+    <tr>
+      <td>供给分位阈值</td>
+      <td>25/75</td>
+      <td>保留原始阈值</td>
+      <td>131.8474</td>
+      <td>2.99%</td>
+      <td>0.45%</td>
+      <td>250.28</td>
+      <td>287.43</td>
+      <td>100.00%</td>
+      <td>0.0000</td>
+      <td>33.9275</td>
+      <td>0.55%</td>
+      <td>42.89</td>
+    </tr>
+    <tr>
+      <td>地方债NCD利差阈值</td>
+      <td>25/75</td>
+      <td>保留原始阈值</td>
+      <td>131.8474</td>
+      <td>2.99%</td>
+      <td>0.45%</td>
+      <td>250.28</td>
+      <td>287.43</td>
+      <td>100.00%</td>
+      <td>0.0000</td>
+      <td>0.0000</td>
+      <td>0.00%</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <td>利差周变化阈值</td>
+      <td>±2BP</td>
+      <td>保留原始阈值</td>
+      <td>131.8474</td>
+      <td>2.99%</td>
+      <td>0.45%</td>
+      <td>250.28</td>
+      <td>287.43</td>
+      <td>100.00%</td>
+      <td>0.0000</td>
+      <td>0.0000</td>
+      <td>0.00%</td>
+      <td>0.00</td>
+    </tr>
+  </tbody>
+</table></div>
+<div class="chart"><!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Awesome-pyecharts</title>
+                <script type="text/javascript" src="https://assets.pyecharts.org/assets/v5/echarts.min.js"></script>
+
+    
+</head>
+<body >
+    <div id="5dca36f9655a48818ec2a74ccbe21e9a" class="chart-container" style="width:100%; height:390px; "></div>
+    <script>
+        var chart_5dca36f9655a48818ec2a74ccbe21e9a = echarts.init(
+            document.getElementById('5dca36f9655a48818ec2a74ccbe21e9a'), 'white', {renderer: 'canvas'});
+        var option_5dca36f9655a48818ec2a74ccbe21e9a = {
+    "animation": true,
+    "animationThreshold": 2000,
+    "animationDuration": 1000,
+    "animationEasing": "cubicOut",
+    "animationDelay": 0,
+    "animationDurationUpdate": 300,
+    "animationEasingUpdate": "cubicOut",
+    "animationDelayUpdate": 0,
+    "aria": {
+        "enabled": false
+    },
+    "color": [
+        "#bb654f",
+        "#176b5b",
+        "#5470c6",
+        "#91cc75",
+        "#fac858",
+        "#ee6666",
+        "#73c0de",
+        "#3ba272",
+        "#fc8452",
+        "#9a60b4",
+        "#ea7ccc"
+    ],
+    "series": [
+        {
+            "type": "line",
+            "name": "\u7d2f\u8ba1\u8d44\u672c\u5229\u5f97",
+            "connectNulls": false,
+            "xAxisIndex": 0,
+            "symbolSize": 4,
+            "showSymbol": true,
+            "smooth": false,
+            "clip": true,
+            "step": false,
+            "stackStrategy": "samesign",
+            "data": [
+                [
+                    "15/85",
+                    240.608
+                ],
+                [
+                    "20/80",
+                    240.608
+                ],
+                [
+                    "25/75",
+                    250.279
+                ],
+                [
+                    "30/70",
+                    245.994
+                ],
+                [
+                    "35/65",
+                    130.302
+                ]
+            ],
+            "hoverAnimation": true,
+            "label": {
+                "show": true,
+                "margin": 8,
+                "valueAnimation": false
+            },
+            "logBase": 10,
+            "seriesLayoutBy": "column",
+            "lineStyle": {
+                "show": true,
+                "width": 1,
+                "opacity": 1,
+                "curveness": 0,
+                "type": "solid"
+            },
+            "areaStyle": {
+                "opacity": 0
+            },
+            "zlevel": 0,
+            "z": 0
+        },
+        {
+            "type": "line",
+            "name": "\u8d44\u672c\u5229\u5f97\u8d85\u989d",
+            "connectNulls": false,
+            "xAxisIndex": 0,
+            "symbolSize": 4,
+            "showSymbol": true,
+            "smooth": false,
+            "clip": true,
+            "step": false,
+            "stackStrategy": "samesign",
+            "data": [
+                [
+                    "15/85",
+                    277.757
+                ],
+                [
+                    "20/80",
+                    277.757
+                ],
+                [
+                    "25/75",
+                    287.429
+                ],
+                [
+                    "30/70",
+                    283.143
+                ],
+                [
+                    "35/65",
+                    167.451
+                ]
+            ],
+            "hoverAnimation": true,
+            "label": {
+                "show": true,
+                "margin": 8,
+                "valueAnimation": false
+            },
+            "logBase": 10,
+            "seriesLayoutBy": "column",
+            "lineStyle": {
+                "show": true,
+                "width": 1,
+                "opacity": 1,
+                "curveness": 0,
+                "type": "solid"
+            },
+            "areaStyle": {
+                "opacity": 0
+            },
+            "zlevel": 0,
+            "z": 0
+        }
+    ],
+    "legend": [
+        {
+            "data": [
+                "\u7d2f\u8ba1\u8d44\u672c\u5229\u5f97",
+                "\u8d44\u672c\u5229\u5f97\u8d85\u989d"
+            ],
+            "selected": {},
+            "show": true,
+            "padding": 5,
+            "itemGap": 10,
+            "itemWidth": 25,
+            "itemHeight": 14,
+            "backgroundColor": "transparent",
+            "borderColor": "#ccc",
+            "borderRadius": 0,
+            "pageButtonItemGap": 5,
+            "pageButtonPosition": "end",
+            "pageFormatter": "{current}/{total}",
+            "pageIconColor": "#2f4554",
+            "pageIconInactiveColor": "#aaa",
+            "pageIconSize": 15,
+            "animationDurationUpdate": 800,
+            "selector": false,
+            "selectorPosition": "auto",
+            "selectorItemGap": 7,
+            "selectorButtonGap": 10
+        }
+    ],
+    "tooltip": {
+        "show": true,
+        "trigger": "axis",
+        "triggerOn": "mousemove|click",
+        "axisPointer": {
+            "type": "line"
+        },
+        "showContent": true,
+        "alwaysShowContent": false,
+        "showDelay": 0,
+        "hideDelay": 100,
+        "enterable": false,
+        "confine": false,
+        "appendToBody": false,
+        "transitionDuration": 0.4,
+        "textStyle": {
+            "fontSize": 14
+        },
+        "borderWidth": 0,
+        "padding": 5,
+        "order": "seriesAsc"
+    },
+    "xAxis": [
+        {
+            "type": "category",
+            "show": true,
+            "scale": false,
+            "nameLocation": "end",
+            "nameGap": 15,
+            "gridIndex": 0,
+            "inverse": false,
+            "offset": 0,
+            "splitNumber": 5,
+            "minInterval": 0,
+            "splitLine": {
+                "show": true,
+                "lineStyle": {
+                    "show": true,
+                    "width": 1,
+                    "opacity": 1,
+                    "curveness": 0,
+                    "type": "solid"
+                }
+            },
+            "animation": true,
+            "animationThreshold": 2000,
+            "animationDuration": 1000,
+            "animationEasing": "cubicOut",
+            "animationDelay": 0,
+            "animationDurationUpdate": 300,
+            "animationEasingUpdate": "cubicOut",
+            "animationDelayUpdate": 0,
+            "data": [
+                "15/85",
+                "20/80",
+                "25/75",
+                "30/70",
+                "35/65"
+            ]
+        }
+    ],
+    "yAxis": [
+        {
+            "type": "value",
+            "name": "\u8d44\u672c\u5229\u5f97\uff08BP\uff09",
+            "show": true,
+            "scale": true,
+            "nameLocation": "end",
+            "nameGap": 15,
+            "gridIndex": 0,
+            "inverse": false,
+            "offset": 0,
+            "splitNumber": 5,
+            "minInterval": 0,
+            "splitLine": {
+                "show": true,
+                "lineStyle": {
+                    "show": true,
+                    "width": 1,
+                    "opacity": 1,
+                    "curveness": 0,
+                    "type": "solid"
+                }
+            },
+            "animation": true,
+            "animationThreshold": 2000,
+            "animationDuration": 1000,
+            "animationEasing": "cubicOut",
+            "animationDelay": 0,
+            "animationDurationUpdate": 300,
+            "animationEasingUpdate": "cubicOut",
+            "animationDelayUpdate": 0
+        }
+    ],
+    "title": [
+        {
+            "show": true,
+            "text": "\u94f6\u884c\u9700\u6c42\u5206\u4f4d\u9608\u503c",
+            "target": "blank",
+            "subtarget": "blank",
+            "padding": 5,
+            "itemGap": 10,
+            "textAlign": "auto",
+            "textVerticalAlign": "auto",
+            "triggerEvent": false
+        }
+    ]
+};
+        chart_5dca36f9655a48818ec2a74ccbe21e9a.setOption(option_5dca36f9655a48818ec2a74ccbe21e9a);
+            window.addEventListener('resize', function(){
+                chart_5dca36f9655a48818ec2a74ccbe21e9a.resize();
+            })
+    </script>
+</body>
+</html>
+</div><div class="chart"><!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Awesome-pyecharts</title>
+                <script type="text/javascript" src="https://assets.pyecharts.org/assets/v5/echarts.min.js"></script>
+
+    
+</head>
+<body >
+    <div id="3e156f08bc52463da37b340b8abd942f" class="chart-container" style="width:100%; height:390px; "></div>
+    <script>
+        var chart_3e156f08bc52463da37b340b8abd942f = echarts.init(
+            document.getElementById('3e156f08bc52463da37b340b8abd942f'), 'white', {renderer: 'canvas'});
+        var option_3e156f08bc52463da37b340b8abd942f = {
+    "animation": true,
+    "animationThreshold": 2000,
+    "animationDuration": 1000,
+    "animationEasing": "cubicOut",
+    "animationDelay": 0,
+    "animationDurationUpdate": 300,
+    "animationEasingUpdate": "cubicOut",
+    "animationDelayUpdate": 0,
+    "aria": {
+        "enabled": false
+    },
+    "color": [
+        "#bb654f",
+        "#176b5b",
+        "#5470c6",
+        "#91cc75",
+        "#fac858",
+        "#ee6666",
+        "#73c0de",
+        "#3ba272",
+        "#fc8452",
+        "#9a60b4",
+        "#ea7ccc"
+    ],
+    "series": [
+        {
+            "type": "line",
+            "name": "\u7d2f\u8ba1\u8d44\u672c\u5229\u5f97",
+            "connectNulls": false,
+            "xAxisIndex": 0,
+            "symbolSize": 4,
+            "showSymbol": true,
+            "smooth": false,
+            "clip": true,
+            "step": false,
+            "stackStrategy": "samesign",
+            "data": [
+                [
+                    "15/85",
+                    207.393
+                ],
+                [
+                    "20/80",
+                    207.593
+                ],
+                [
+                    "25/75",
+                    250.279
+                ],
+                [
+                    "30/70",
+                    249.368
+                ],
+                [
+                    "35/65",
+                    226.705
+                ]
+            ],
+            "hoverAnimation": true,
+            "label": {
+                "show": true,
+                "margin": 8,
+                "valueAnimation": false
+            },
+            "logBase": 10,
+            "seriesLayoutBy": "column",
+            "lineStyle": {
+                "show": true,
+                "width": 1,
+                "opacity": 1,
+                "curveness": 0,
+                "type": "solid"
+            },
+            "areaStyle": {
+                "opacity": 0
+            },
+            "zlevel": 0,
+            "z": 0
+        },
+        {
+            "type": "line",
+            "name": "\u8d44\u672c\u5229\u5f97\u8d85\u989d",
+            "connectNulls": false,
+            "xAxisIndex": 0,
+            "symbolSize": 4,
+            "showSymbol": true,
+            "smooth": false,
+            "clip": true,
+            "step": false,
+            "stackStrategy": "samesign",
+            "data": [
+                [
+                    "15/85",
+                    244.542
+                ],
+                [
+                    "20/80",
+                    244.743
+                ],
+                [
+                    "25/75",
+                    287.429
+                ],
+                [
+                    "30/70",
+                    286.517
+                ],
+                [
+                    "35/65",
+                    263.855
+                ]
+            ],
+            "hoverAnimation": true,
+            "label": {
+                "show": true,
+                "margin": 8,
+                "valueAnimation": false
+            },
+            "logBase": 10,
+            "seriesLayoutBy": "column",
+            "lineStyle": {
+                "show": true,
+                "width": 1,
+                "opacity": 1,
+                "curveness": 0,
+                "type": "solid"
+            },
+            "areaStyle": {
+                "opacity": 0
+            },
+            "zlevel": 0,
+            "z": 0
+        }
+    ],
+    "legend": [
+        {
+            "data": [
+                "\u7d2f\u8ba1\u8d44\u672c\u5229\u5f97",
+                "\u8d44\u672c\u5229\u5f97\u8d85\u989d"
+            ],
+            "selected": {},
+            "show": true,
+            "padding": 5,
+            "itemGap": 10,
+            "itemWidth": 25,
+            "itemHeight": 14,
+            "backgroundColor": "transparent",
+            "borderColor": "#ccc",
+            "borderRadius": 0,
+            "pageButtonItemGap": 5,
+            "pageButtonPosition": "end",
+            "pageFormatter": "{current}/{total}",
+            "pageIconColor": "#2f4554",
+            "pageIconInactiveColor": "#aaa",
+            "pageIconSize": 15,
+            "animationDurationUpdate": 800,
+            "selector": false,
+            "selectorPosition": "auto",
+            "selectorItemGap": 7,
+            "selectorButtonGap": 10
+        }
+    ],
+    "tooltip": {
+        "show": true,
+        "trigger": "axis",
+        "triggerOn": "mousemove|click",
+        "axisPointer": {
+            "type": "line"
+        },
+        "showContent": true,
+        "alwaysShowContent": false,
+        "showDelay": 0,
+        "hideDelay": 100,
+        "enterable": false,
+        "confine": false,
+        "appendToBody": false,
+        "transitionDuration": 0.4,
+        "textStyle": {
+            "fontSize": 14
+        },
+        "borderWidth": 0,
+        "padding": 5,
+        "order": "seriesAsc"
+    },
+    "xAxis": [
+        {
+            "type": "category",
+            "show": true,
+            "scale": false,
+            "nameLocation": "end",
+            "nameGap": 15,
+            "gridIndex": 0,
+            "inverse": false,
+            "offset": 0,
+            "splitNumber": 5,
+            "minInterval": 0,
+            "splitLine": {
+                "show": true,
+                "lineStyle": {
+                    "show": true,
+                    "width": 1,
+                    "opacity": 1,
+                    "curveness": 0,
+                    "type": "solid"
+                }
+            },
+            "animation": true,
+            "animationThreshold": 2000,
+            "animationDuration": 1000,
+            "animationEasing": "cubicOut",
+            "animationDelay": 0,
+            "animationDurationUpdate": 300,
+            "animationEasingUpdate": "cubicOut",
+            "animationDelayUpdate": 0,
+            "data": [
+                "15/85",
+                "20/80",
+                "25/75",
+                "30/70",
+                "35/65"
+            ]
+        }
+    ],
+    "yAxis": [
+        {
+            "type": "value",
+            "name": "\u8d44\u672c\u5229\u5f97\uff08BP\uff09",
+            "show": true,
+            "scale": true,
+            "nameLocation": "end",
+            "nameGap": 15,
+            "gridIndex": 0,
+            "inverse": false,
+            "offset": 0,
+            "splitNumber": 5,
+            "minInterval": 0,
+            "splitLine": {
+                "show": true,
+                "lineStyle": {
+                    "show": true,
+                    "width": 1,
+                    "opacity": 1,
+                    "curveness": 0,
+                    "type": "solid"
+                }
+            },
+            "animation": true,
+            "animationThreshold": 2000,
+            "animationDuration": 1000,
+            "animationEasing": "cubicOut",
+            "animationDelay": 0,
+            "animationDurationUpdate": 300,
+            "animationEasingUpdate": "cubicOut",
+            "animationDelayUpdate": 0
+        }
+    ],
+    "title": [
+        {
+            "show": true,
+            "text": "\u4f9b\u7ed9\u5206\u4f4d\u9608\u503c",
+            "target": "blank",
+            "subtarget": "blank",
+            "padding": 5,
+            "itemGap": 10,
+            "textAlign": "auto",
+            "textVerticalAlign": "auto",
+            "triggerEvent": false
+        }
+    ]
+};
+        chart_3e156f08bc52463da37b340b8abd942f.setOption(option_3e156f08bc52463da37b340b8abd942f);
+            window.addEventListener('resize', function(){
+                chart_3e156f08bc52463da37b340b8abd942f.resize();
+            })
+    </script>
+</body>
+</html>
+</div><div class="chart"><!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Awesome-pyecharts</title>
+                <script type="text/javascript" src="https://assets.pyecharts.org/assets/v5/echarts.min.js"></script>
+
+    
+</head>
+<body >
+    <div id="8fda8650cffb4a138940e317fde5e9be" class="chart-container" style="width:100%; height:390px; "></div>
+    <script>
+        var chart_8fda8650cffb4a138940e317fde5e9be = echarts.init(
+            document.getElementById('8fda8650cffb4a138940e317fde5e9be'), 'white', {renderer: 'canvas'});
+        var option_8fda8650cffb4a138940e317fde5e9be = {
+    "animation": true,
+    "animationThreshold": 2000,
+    "animationDuration": 1000,
+    "animationEasing": "cubicOut",
+    "animationDelay": 0,
+    "animationDurationUpdate": 300,
+    "animationEasingUpdate": "cubicOut",
+    "animationDelayUpdate": 0,
+    "aria": {
+        "enabled": false
+    },
+    "color": [
+        "#bb654f",
+        "#176b5b",
+        "#5470c6",
+        "#91cc75",
+        "#fac858",
+        "#ee6666",
+        "#73c0de",
+        "#3ba272",
+        "#fc8452",
+        "#9a60b4",
+        "#ea7ccc"
+    ],
+    "series": [
+        {
+            "type": "line",
+            "name": "\u7d2f\u8ba1\u8d44\u672c\u5229\u5f97",
+            "connectNulls": false,
+            "xAxisIndex": 0,
+            "symbolSize": 4,
+            "showSymbol": true,
+            "smooth": false,
+            "clip": true,
+            "step": false,
+            "stackStrategy": "samesign",
+            "data": [
+                [
+                    "15/85",
+                    146.772
+                ],
+                [
+                    "20/80",
+                    250.279
+                ],
+                [
+                    "25/75",
+                    250.279
+                ],
+                [
+                    "30/70",
+                    222.169
+                ],
+                [
+                    "35/65",
+                    243.379
+                ]
+            ],
+            "hoverAnimation": true,
+            "label": {
+                "show": true,
+                "margin": 8,
+                "valueAnimation": false
+            },
+            "logBase": 10,
+            "seriesLayoutBy": "column",
+            "lineStyle": {
+                "show": true,
+                "width": 1,
+                "opacity": 1,
+                "curveness": 0,
+                "type": "solid"
+            },
+            "areaStyle": {
+                "opacity": 0
+            },
+            "zlevel": 0,
+            "z": 0
+        },
+        {
+            "type": "line",
+            "name": "\u8d44\u672c\u5229\u5f97\u8d85\u989d",
+            "connectNulls": false,
+            "xAxisIndex": 0,
+            "symbolSize": 4,
+            "showSymbol": true,
+            "smooth": false,
+            "clip": true,
+            "step": false,
+            "stackStrategy": "samesign",
+            "data": [
+                [
+                    "15/85",
+                    183.921
+                ],
+                [
+                    "20/80",
+                    287.429
+                ],
+                [
+                    "25/75",
+                    287.429
+                ],
+                [
+                    "30/70",
+                    259.318
+                ],
+                [
+                    "35/65",
+                    280.528
+                ]
+            ],
+            "hoverAnimation": true,
+            "label": {
+                "show": true,
+                "margin": 8,
+                "valueAnimation": false
+            },
+            "logBase": 10,
+            "seriesLayoutBy": "column",
+            "lineStyle": {
+                "show": true,
+                "width": 1,
+                "opacity": 1,
+                "curveness": 0,
+                "type": "solid"
+            },
+            "areaStyle": {
+                "opacity": 0
+            },
+            "zlevel": 0,
+            "z": 0
+        }
+    ],
+    "legend": [
+        {
+            "data": [
+                "\u7d2f\u8ba1\u8d44\u672c\u5229\u5f97",
+                "\u8d44\u672c\u5229\u5f97\u8d85\u989d"
+            ],
+            "selected": {},
+            "show": true,
+            "padding": 5,
+            "itemGap": 10,
+            "itemWidth": 25,
+            "itemHeight": 14,
+            "backgroundColor": "transparent",
+            "borderColor": "#ccc",
+            "borderRadius": 0,
+            "pageButtonItemGap": 5,
+            "pageButtonPosition": "end",
+            "pageFormatter": "{current}/{total}",
+            "pageIconColor": "#2f4554",
+            "pageIconInactiveColor": "#aaa",
+            "pageIconSize": 15,
+            "animationDurationUpdate": 800,
+            "selector": false,
+            "selectorPosition": "auto",
+            "selectorItemGap": 7,
+            "selectorButtonGap": 10
+        }
+    ],
+    "tooltip": {
+        "show": true,
+        "trigger": "axis",
+        "triggerOn": "mousemove|click",
+        "axisPointer": {
+            "type": "line"
+        },
+        "showContent": true,
+        "alwaysShowContent": false,
+        "showDelay": 0,
+        "hideDelay": 100,
+        "enterable": false,
+        "confine": false,
+        "appendToBody": false,
+        "transitionDuration": 0.4,
+        "textStyle": {
+            "fontSize": 14
+        },
+        "borderWidth": 0,
+        "padding": 5,
+        "order": "seriesAsc"
+    },
+    "xAxis": [
+        {
+            "type": "category",
+            "show": true,
+            "scale": false,
+            "nameLocation": "end",
+            "nameGap": 15,
+            "gridIndex": 0,
+            "inverse": false,
+            "offset": 0,
+            "splitNumber": 5,
+            "minInterval": 0,
+            "splitLine": {
+                "show": true,
+                "lineStyle": {
+                    "show": true,
+                    "width": 1,
+                    "opacity": 1,
+                    "curveness": 0,
+                    "type": "solid"
+                }
+            },
+            "animation": true,
+            "animationThreshold": 2000,
+            "animationDuration": 1000,
+            "animationEasing": "cubicOut",
+            "animationDelay": 0,
+            "animationDurationUpdate": 300,
+            "animationEasingUpdate": "cubicOut",
+            "animationDelayUpdate": 0,
+            "data": [
+                "15/85",
+                "20/80",
+                "25/75",
+                "30/70",
+                "35/65"
+            ]
+        }
+    ],
+    "yAxis": [
+        {
+            "type": "value",
+            "name": "\u8d44\u672c\u5229\u5f97\uff08BP\uff09",
+            "show": true,
+            "scale": true,
+            "nameLocation": "end",
+            "nameGap": 15,
+            "gridIndex": 0,
+            "inverse": false,
+            "offset": 0,
+            "splitNumber": 5,
+            "minInterval": 0,
+            "splitLine": {
+                "show": true,
+                "lineStyle": {
+                    "show": true,
+                    "width": 1,
+                    "opacity": 1,
+                    "curveness": 0,
+                    "type": "solid"
+                }
+            },
+            "animation": true,
+            "animationThreshold": 2000,
+            "animationDuration": 1000,
+            "animationEasing": "cubicOut",
+            "animationDelay": 0,
+            "animationDurationUpdate": 300,
+            "animationEasingUpdate": "cubicOut",
+            "animationDelayUpdate": 0
+        }
+    ],
+    "title": [
+        {
+            "show": true,
+            "text": "\u5730\u65b9\u503a\u56fd\u503a\u5229\u5dee\u9608\u503c",
+            "target": "blank",
+            "subtarget": "blank",
+            "padding": 5,
+            "itemGap": 10,
+            "textAlign": "auto",
+            "textVerticalAlign": "auto",
+            "triggerEvent": false
+        }
+    ]
+};
+        chart_8fda8650cffb4a138940e317fde5e9be.setOption(option_8fda8650cffb4a138940e317fde5e9be);
+            window.addEventListener('resize', function(){
+                chart_8fda8650cffb4a138940e317fde5e9be.resize();
+            })
+    </script>
+</body>
+</html>
+</div><div class="chart"><!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Awesome-pyecharts</title>
+                <script type="text/javascript" src="https://assets.pyecharts.org/assets/v5/echarts.min.js"></script>
+
+    
+</head>
+<body >
+    <div id="dc22ecda81ee4ab4868ec2790efb6ae4" class="chart-container" style="width:100%; height:390px; "></div>
+    <script>
+        var chart_dc22ecda81ee4ab4868ec2790efb6ae4 = echarts.init(
+            document.getElementById('dc22ecda81ee4ab4868ec2790efb6ae4'), 'white', {renderer: 'canvas'});
+        var option_dc22ecda81ee4ab4868ec2790efb6ae4 = {
+    "animation": true,
+    "animationThreshold": 2000,
+    "animationDuration": 1000,
+    "animationEasing": "cubicOut",
+    "animationDelay": 0,
+    "animationDurationUpdate": 300,
+    "animationEasingUpdate": "cubicOut",
+    "animationDelayUpdate": 0,
+    "aria": {
+        "enabled": false
+    },
+    "color": [
+        "#bb654f",
+        "#176b5b",
+        "#5470c6",
+        "#91cc75",
+        "#fac858",
+        "#ee6666",
+        "#73c0de",
+        "#3ba272",
+        "#fc8452",
+        "#9a60b4",
+        "#ea7ccc"
+    ],
+    "series": [
+        {
+            "type": "line",
+            "name": "\u7d2f\u8ba1\u8d44\u672c\u5229\u5f97",
+            "connectNulls": false,
+            "xAxisIndex": 0,
+            "symbolSize": 4,
+            "showSymbol": true,
+            "smooth": false,
+            "clip": true,
+            "step": false,
+            "stackStrategy": "samesign",
+            "data": [
+                [
+                    "15/85",
+                    250.279
+                ],
+                [
+                    "20/80",
+                    250.279
+                ],
+                [
+                    "25/75",
+                    250.279
+                ],
+                [
+                    "30/70",
+                    250.279
+                ],
+                [
+                    "35/65",
+                    250.279
+                ]
+            ],
+            "hoverAnimation": true,
+            "label": {
+                "show": true,
+                "margin": 8,
+                "valueAnimation": false
+            },
+            "logBase": 10,
+            "seriesLayoutBy": "column",
+            "lineStyle": {
+                "show": true,
+                "width": 1,
+                "opacity": 1,
+                "curveness": 0,
+                "type": "solid"
+            },
+            "areaStyle": {
+                "opacity": 0
+            },
+            "zlevel": 0,
+            "z": 0
+        },
+        {
+            "type": "line",
+            "name": "\u8d44\u672c\u5229\u5f97\u8d85\u989d",
+            "connectNulls": false,
+            "xAxisIndex": 0,
+            "symbolSize": 4,
+            "showSymbol": true,
+            "smooth": false,
+            "clip": true,
+            "step": false,
+            "stackStrategy": "samesign",
+            "data": [
+                [
+                    "15/85",
+                    287.429
+                ],
+                [
+                    "20/80",
+                    287.429
+                ],
+                [
+                    "25/75",
+                    287.429
+                ],
+                [
+                    "30/70",
+                    287.429
+                ],
+                [
+                    "35/65",
+                    287.429
+                ]
+            ],
+            "hoverAnimation": true,
+            "label": {
+                "show": true,
+                "margin": 8,
+                "valueAnimation": false
+            },
+            "logBase": 10,
+            "seriesLayoutBy": "column",
+            "lineStyle": {
+                "show": true,
+                "width": 1,
+                "opacity": 1,
+                "curveness": 0,
+                "type": "solid"
+            },
+            "areaStyle": {
+                "opacity": 0
+            },
+            "zlevel": 0,
+            "z": 0
+        }
+    ],
+    "legend": [
+        {
+            "data": [
+                "\u7d2f\u8ba1\u8d44\u672c\u5229\u5f97",
+                "\u8d44\u672c\u5229\u5f97\u8d85\u989d"
+            ],
+            "selected": {},
+            "show": true,
+            "padding": 5,
+            "itemGap": 10,
+            "itemWidth": 25,
+            "itemHeight": 14,
+            "backgroundColor": "transparent",
+            "borderColor": "#ccc",
+            "borderRadius": 0,
+            "pageButtonItemGap": 5,
+            "pageButtonPosition": "end",
+            "pageFormatter": "{current}/{total}",
+            "pageIconColor": "#2f4554",
+            "pageIconInactiveColor": "#aaa",
+            "pageIconSize": 15,
+            "animationDurationUpdate": 800,
+            "selector": false,
+            "selectorPosition": "auto",
+            "selectorItemGap": 7,
+            "selectorButtonGap": 10
+        }
+    ],
+    "tooltip": {
+        "show": true,
+        "trigger": "axis",
+        "triggerOn": "mousemove|click",
+        "axisPointer": {
+            "type": "line"
+        },
+        "showContent": true,
+        "alwaysShowContent": false,
+        "showDelay": 0,
+        "hideDelay": 100,
+        "enterable": false,
+        "confine": false,
+        "appendToBody": false,
+        "transitionDuration": 0.4,
+        "textStyle": {
+            "fontSize": 14
+        },
+        "borderWidth": 0,
+        "padding": 5,
+        "order": "seriesAsc"
+    },
+    "xAxis": [
+        {
+            "type": "category",
+            "show": true,
+            "scale": false,
+            "nameLocation": "end",
+            "nameGap": 15,
+            "gridIndex": 0,
+            "inverse": false,
+            "offset": 0,
+            "splitNumber": 5,
+            "minInterval": 0,
+            "splitLine": {
+                "show": true,
+                "lineStyle": {
+                    "show": true,
+                    "width": 1,
+                    "opacity": 1,
+                    "curveness": 0,
+                    "type": "solid"
+                }
+            },
+            "animation": true,
+            "animationThreshold": 2000,
+            "animationDuration": 1000,
+            "animationEasing": "cubicOut",
+            "animationDelay": 0,
+            "animationDurationUpdate": 300,
+            "animationEasingUpdate": "cubicOut",
+            "animationDelayUpdate": 0,
+            "data": [
+                "15/85",
+                "20/80",
+                "25/75",
+                "30/70",
+                "35/65"
+            ]
+        }
+    ],
+    "yAxis": [
+        {
+            "type": "value",
+            "name": "\u8d44\u672c\u5229\u5f97\uff08BP\uff09",
+            "show": true,
+            "scale": true,
+            "nameLocation": "end",
+            "nameGap": 15,
+            "gridIndex": 0,
+            "inverse": false,
+            "offset": 0,
+            "splitNumber": 5,
+            "minInterval": 0,
+            "splitLine": {
+                "show": true,
+                "lineStyle": {
+                    "show": true,
+                    "width": 1,
+                    "opacity": 1,
+                    "curveness": 0,
+                    "type": "solid"
+                }
+            },
+            "animation": true,
+            "animationThreshold": 2000,
+            "animationDuration": 1000,
+            "animationEasing": "cubicOut",
+            "animationDelay": 0,
+            "animationDurationUpdate": 300,
+            "animationEasingUpdate": "cubicOut",
+            "animationDelayUpdate": 0
+        }
+    ],
+    "title": [
+        {
+            "show": true,
+            "text": "\u5730\u65b9\u503aNCD\u5229\u5dee\u9608\u503c",
+            "target": "blank",
+            "subtarget": "blank",
+            "padding": 5,
+            "itemGap": 10,
+            "textAlign": "auto",
+            "textVerticalAlign": "auto",
+            "triggerEvent": false
+        }
+    ]
+};
+        chart_dc22ecda81ee4ab4868ec2790efb6ae4.setOption(option_dc22ecda81ee4ab4868ec2790efb6ae4);
+            window.addEventListener('resize', function(){
+                chart_dc22ecda81ee4ab4868ec2790efb6ae4.resize();
+            })
+    </script>
+</body>
+</html>
+</div><div class="chart"><!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Awesome-pyecharts</title>
+                <script type="text/javascript" src="https://assets.pyecharts.org/assets/v5/echarts.min.js"></script>
+
+    
+</head>
+<body >
+    <div id="7682ec8acb284541b7a9e9a8c643367b" class="chart-container" style="width:100%; height:390px; "></div>
+    <script>
+        var chart_7682ec8acb284541b7a9e9a8c643367b = echarts.init(
+            document.getElementById('7682ec8acb284541b7a9e9a8c643367b'), 'white', {renderer: 'canvas'});
+        var option_7682ec8acb284541b7a9e9a8c643367b = {
+    "animation": true,
+    "animationThreshold": 2000,
+    "animationDuration": 1000,
+    "animationEasing": "cubicOut",
+    "animationDelay": 0,
+    "animationDurationUpdate": 300,
+    "animationEasingUpdate": "cubicOut",
+    "animationDelayUpdate": 0,
+    "aria": {
+        "enabled": false
+    },
+    "color": [
+        "#bb654f",
+        "#176b5b",
+        "#5470c6",
+        "#91cc75",
+        "#fac858",
+        "#ee6666",
+        "#73c0de",
+        "#3ba272",
+        "#fc8452",
+        "#9a60b4",
+        "#ea7ccc"
+    ],
+    "series": [
+        {
+            "type": "line",
+            "name": "\u7d2f\u8ba1\u8d44\u672c\u5229\u5f97",
+            "connectNulls": false,
+            "xAxisIndex": 0,
+            "symbolSize": 4,
+            "showSymbol": true,
+            "smooth": false,
+            "clip": true,
+            "step": false,
+            "stackStrategy": "samesign",
+            "data": [
+                [
+                    "\u00b11BP",
+                    250.279
+                ],
+                [
+                    "\u00b11.5BP",
+                    250.279
+                ],
+                [
+                    "\u00b12BP",
+                    250.279
+                ],
+                [
+                    "\u00b12.5BP",
+                    250.279
+                ],
+                [
+                    "\u00b13BP",
+                    250.279
+                ]
+            ],
+            "hoverAnimation": true,
+            "label": {
+                "show": true,
+                "margin": 8,
+                "valueAnimation": false
+            },
+            "logBase": 10,
+            "seriesLayoutBy": "column",
+            "lineStyle": {
+                "show": true,
+                "width": 1,
+                "opacity": 1,
+                "curveness": 0,
+                "type": "solid"
+            },
+            "areaStyle": {
+                "opacity": 0
+            },
+            "zlevel": 0,
+            "z": 0
+        },
+        {
+            "type": "line",
+            "name": "\u8d44\u672c\u5229\u5f97\u8d85\u989d",
+            "connectNulls": false,
+            "xAxisIndex": 0,
+            "symbolSize": 4,
+            "showSymbol": true,
+            "smooth": false,
+            "clip": true,
+            "step": false,
+            "stackStrategy": "samesign",
+            "data": [
+                [
+                    "\u00b11BP",
+                    287.429
+                ],
+                [
+                    "\u00b11.5BP",
+                    287.429
+                ],
+                [
+                    "\u00b12BP",
+                    287.429
+                ],
+                [
+                    "\u00b12.5BP",
+                    287.429
+                ],
+                [
+                    "\u00b13BP",
+                    287.429
+                ]
+            ],
+            "hoverAnimation": true,
+            "label": {
+                "show": true,
+                "margin": 8,
+                "valueAnimation": false
+            },
+            "logBase": 10,
+            "seriesLayoutBy": "column",
+            "lineStyle": {
+                "show": true,
+                "width": 1,
+                "opacity": 1,
+                "curveness": 0,
+                "type": "solid"
+            },
+            "areaStyle": {
+                "opacity": 0
+            },
+            "zlevel": 0,
+            "z": 0
+        }
+    ],
+    "legend": [
+        {
+            "data": [
+                "\u7d2f\u8ba1\u8d44\u672c\u5229\u5f97",
+                "\u8d44\u672c\u5229\u5f97\u8d85\u989d"
+            ],
+            "selected": {},
+            "show": true,
+            "padding": 5,
+            "itemGap": 10,
+            "itemWidth": 25,
+            "itemHeight": 14,
+            "backgroundColor": "transparent",
+            "borderColor": "#ccc",
+            "borderRadius": 0,
+            "pageButtonItemGap": 5,
+            "pageButtonPosition": "end",
+            "pageFormatter": "{current}/{total}",
+            "pageIconColor": "#2f4554",
+            "pageIconInactiveColor": "#aaa",
+            "pageIconSize": 15,
+            "animationDurationUpdate": 800,
+            "selector": false,
+            "selectorPosition": "auto",
+            "selectorItemGap": 7,
+            "selectorButtonGap": 10
+        }
+    ],
+    "tooltip": {
+        "show": true,
+        "trigger": "axis",
+        "triggerOn": "mousemove|click",
+        "axisPointer": {
+            "type": "line"
+        },
+        "showContent": true,
+        "alwaysShowContent": false,
+        "showDelay": 0,
+        "hideDelay": 100,
+        "enterable": false,
+        "confine": false,
+        "appendToBody": false,
+        "transitionDuration": 0.4,
+        "textStyle": {
+            "fontSize": 14
+        },
+        "borderWidth": 0,
+        "padding": 5,
+        "order": "seriesAsc"
+    },
+    "xAxis": [
+        {
+            "type": "category",
+            "show": true,
+            "scale": false,
+            "nameLocation": "end",
+            "nameGap": 15,
+            "gridIndex": 0,
+            "inverse": false,
+            "offset": 0,
+            "splitNumber": 5,
+            "minInterval": 0,
+            "splitLine": {
+                "show": true,
+                "lineStyle": {
+                    "show": true,
+                    "width": 1,
+                    "opacity": 1,
+                    "curveness": 0,
+                    "type": "solid"
+                }
+            },
+            "animation": true,
+            "animationThreshold": 2000,
+            "animationDuration": 1000,
+            "animationEasing": "cubicOut",
+            "animationDelay": 0,
+            "animationDurationUpdate": 300,
+            "animationEasingUpdate": "cubicOut",
+            "animationDelayUpdate": 0,
+            "data": [
+                "\u00b11BP",
+                "\u00b11.5BP",
+                "\u00b12BP",
+                "\u00b12.5BP",
+                "\u00b13BP"
+            ]
+        }
+    ],
+    "yAxis": [
+        {
+            "type": "value",
+            "name": "\u8d44\u672c\u5229\u5f97\uff08BP\uff09",
+            "show": true,
+            "scale": true,
+            "nameLocation": "end",
+            "nameGap": 15,
+            "gridIndex": 0,
+            "inverse": false,
+            "offset": 0,
+            "splitNumber": 5,
+            "minInterval": 0,
+            "splitLine": {
+                "show": true,
+                "lineStyle": {
+                    "show": true,
+                    "width": 1,
+                    "opacity": 1,
+                    "curveness": 0,
+                    "type": "solid"
+                }
+            },
+            "animation": true,
+            "animationThreshold": 2000,
+            "animationDuration": 1000,
+            "animationEasing": "cubicOut",
+            "animationDelay": 0,
+            "animationDurationUpdate": 300,
+            "animationEasingUpdate": "cubicOut",
+            "animationDelayUpdate": 0
+        }
+    ],
+    "title": [
+        {
+            "show": true,
+            "text": "\u5229\u5dee\u5468\u53d8\u5316\u9608\u503c",
+            "target": "blank",
+            "subtarget": "blank",
+            "padding": 5,
+            "itemGap": 10,
+            "textAlign": "auto",
+            "textVerticalAlign": "auto",
+            "triggerEvent": false
+        }
+    ]
+};
+        chart_7682ec8acb284541b7a9e9a8c643367b.setOption(option_7682ec8acb284541b7a9e9a8c643367b);
+            window.addEventListener('resize', function(){
+                chart_7682ec8acb284541b7a9e9a8c643367b.resize();
+            })
+    </script>
+</body>
+</html>
+</div><div class="chart"><!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Awesome-pyecharts</title>
+                <script type="text/javascript" src="https://assets.pyecharts.org/assets/v5/echarts.min.js"></script>
+
+    
+</head>
+<body >
+    <div id="4a21915365ae4a178031e707b9f3d47e" class="chart-container" style="width:100%; height:430px; "></div>
+    <script>
+        var chart_4a21915365ae4a178031e707b9f3d47e = echarts.init(
+            document.getElementById('4a21915365ae4a178031e707b9f3d47e'), 'white', {renderer: 'canvas'});
+        var option_4a21915365ae4a178031e707b9f3d47e = {
+    "animation": true,
+    "animationThreshold": 2000,
+    "animationDuration": 1000,
+    "animationEasing": "cubicOut",
+    "animationDelay": 0,
+    "animationDurationUpdate": 300,
+    "animationEasingUpdate": "cubicOut",
+    "animationDelayUpdate": 0,
+    "aria": {
+        "enabled": false
+    },
+    "color": [
+        "#bb654f",
+        "#5470c6",
+        "#91cc75",
+        "#fac858",
+        "#ee6666",
+        "#73c0de",
+        "#3ba272",
+        "#fc8452",
+        "#9a60b4",
+        "#ea7ccc"
+    ],
+    "series": [
+        {
+            "type": "scatter",
+            "name": "\u5168\u90e8\u5019\u9009",
+            "symbolSize": 8,
+            "data": [
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -22.46,
+                    283.143
+                ],
+                [
+                    -30.723,
+                    287.429
+                ],
+                [
+                    -30.723,
+                    287.429
+                ],
+                [
+                    -30.723,
+                    287.429
+                ],
+                [
+                    -30.723,
+                    287.429
+                ],
+                [
+                    -30.723,
+                    287.429
+                ],
+                [
+                    -30.723,
+                    287.429
+                ],
+                [
+                    -30.723,
+                    287.429
+                ],
+                [
+                    -30.723,
+                    287.429
+                ],
+                [
+                    -30.723,
+                    287.429
+                ],
+                [
+                    -30.723,
+                    287.429
+                ],
+                [
+                    -30.723,
+                    287.429
+                ],
+                [
+                    -30.723,
+                    287.429
+                ],
+                [
+                    -30.723,
+                    287.429
+                ],
+                [
+                    -30.723,
+                    287.429
+                ],
+                [
+                    -30.723,
+                    287.429
+                ],
+                [
+                    -30.723,
+                    287.429
+                ],
+                [
+                    -30.723,
+                    287.429
+                ],
+                [
+                    -30.723,
+                    277.757
+                ],
+                [
+                    -30.723,
+                    277.757
+                ],
+                [
+                    -30.723,
+                    277.757
+                ],
+                [
+                    -30.723,
+                    277.757
+                ],
+                [
+                    -30.723,
+                    277.757
+                ],
+                [
+                    -30.723,
+                    277.757
+                ],
+                [
+                    -22.46,
+                    244.542
+                ],
+                [
+                    -30.723,
+                    286.517
+                ],
+                [
+                    -30.723,
+                    244.743
+                ],
+                [
+                    -22.549,
+                    179.636
+                ],
+                [
+                    -30.723,
+                    183.921
+                ],
+                [
+                    -30.723,
+                    183.921
+                ],
+                [
+                    -30.723,
+                    174.249
+                ],
+                [
+                    -30.723,
+                    174.249
+                ],
+                [
+                    -40.575,
+                    263.855
+                ],
+                [
+                    -49.306,
+                    300.567
+                ],
+                [
+                    -35.002,
+                    212.986
+                ],
+                [
+                    -49.306,
+                    255.032
+                ],
+                [
+                    -35.002,
+                    167.451
+                ],
+                [
+                    -35.002,
+                    167.451
+                ],
+                [
+                    -35.002,
+                    167.451
+                ],
+                [
+                    -35.002,
+                    167.451
+                ],
+                [
+                    -35.002,
+                    167.451
+                ],
+                [
+                    -69.722,
+                    259.318
+                ],
+                [
+                    -69.722,
+                    259.318
+                ],
+                [
+                    -69.722,
+                    249.646
+                ],
+                [
+                    -69.722,
+                    249.646
+                ],
+                [
+                    -88.669,
+                    280.528
+                ],
+                [
+                    -88.669,
+                    280.528
+                ],
+                [
+                    -88.669,
+                    270.856
+                ],
+                [
+                    -88.669,
+                    270.856
+                ]
+            ],
+            "label": {
+                "show": true,
+                "position": "right",
+                "margin": 8,
+                "valueAnimation": false
+            }
+        }
+    ],
+    "legend": [
+        {
+            "data": [
+                "\u5168\u90e8\u5019\u9009"
+            ],
+            "selected": {},
+            "show": true,
+            "padding": 5,
+            "itemGap": 10,
+            "itemWidth": 25,
+            "itemHeight": 14,
+            "backgroundColor": "transparent",
+            "borderColor": "#ccc",
+            "borderRadius": 0,
+            "pageButtonItemGap": 5,
+            "pageButtonPosition": "end",
+            "pageFormatter": "{current}/{total}",
+            "pageIconColor": "#2f4554",
+            "pageIconInactiveColor": "#aaa",
+            "pageIconSize": 15,
+            "animationDurationUpdate": 800,
+            "selector": false,
+            "selectorPosition": "auto",
+            "selectorItemGap": 7,
+            "selectorButtonGap": 10
+        }
+    ],
+    "tooltip": {
+        "show": true,
+        "trigger": "item",
+        "triggerOn": "mousemove|click",
+        "axisPointer": {
+            "type": "line"
+        },
+        "showContent": true,
+        "alwaysShowContent": false,
+        "showDelay": 0,
+        "hideDelay": 100,
+        "enterable": false,
+        "confine": false,
+        "appendToBody": false,
+        "transitionDuration": 0.4,
+        "textStyle": {
+            "fontSize": 14
+        },
+        "borderWidth": 0,
+        "padding": 5,
+        "order": "seriesAsc"
+    },
+    "xAxis": [
+        {
+            "type": "value",
+            "name": "\u8d44\u672c\u5229\u5f97\u6700\u5927\u56de\u64a4\uff08BP\uff09",
+            "show": true,
+            "scale": true,
+            "nameLocation": "end",
+            "nameGap": 15,
+            "gridIndex": 0,
+            "inverse": false,
+            "offset": 0,
+            "splitNumber": 5,
+            "minInterval": 0,
+            "splitLine": {
+                "show": true,
+                "lineStyle": {
+                    "show": true,
+                    "width": 1,
+                    "opacity": 1,
+                    "curveness": 0,
+                    "type": "solid"
+                }
+            },
+            "animation": true,
+            "animationThreshold": 2000,
+            "animationDuration": 1000,
+            "animationEasing": "cubicOut",
+            "animationDelay": 0,
+            "animationDurationUpdate": 300,
+            "animationEasingUpdate": "cubicOut",
+            "animationDelayUpdate": 0,
+            "data": [
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -22.46,
+                -30.723,
+                -30.723,
+                -30.723,
+                -30.723,
+                -30.723,
+                -30.723,
+                -30.723,
+                -30.723,
+                -30.723,
+                -30.723,
+                -30.723,
+                -30.723,
+                -30.723,
+                -30.723,
+                -30.723,
+                -30.723,
+                -30.723,
+                -30.723,
+                -30.723,
+                -30.723,
+                -30.723,
+                -30.723,
+                -30.723,
+                -22.46,
+                -30.723,
+                -30.723,
+                -22.549,
+                -30.723,
+                -30.723,
+                -30.723,
+                -30.723,
+                -40.575,
+                -49.306,
+                -35.002,
+                -49.306,
+                -35.002,
+                -35.002,
+                -35.002,
+                -35.002,
+                -35.002,
+                -69.722,
+                -69.722,
+                -69.722,
+                -69.722,
+                -88.669,
+                -88.669,
+                -88.669,
+                -88.669
+            ]
+        }
+    ],
+    "yAxis": [
+        {
+            "type": "value",
+            "name": "\u8d44\u672c\u5229\u5f97\u8d85\u989d\uff08BP\uff09",
+            "show": true,
+            "scale": true,
+            "nameLocation": "end",
+            "nameGap": 15,
+            "gridIndex": 0,
+            "inverse": false,
+            "offset": 0,
+            "splitNumber": 5,
+            "minInterval": 0,
+            "splitLine": {
+                "show": true,
+                "lineStyle": {
+                    "show": true,
+                    "width": 1,
+                    "opacity": 1,
+                    "curveness": 0,
+                    "type": "solid"
+                }
+            },
+            "animation": true,
+            "animationThreshold": 2000,
+            "animationDuration": 1000,
+            "animationEasing": "cubicOut",
+            "animationDelay": 0,
+            "animationDurationUpdate": 300,
+            "animationEasingUpdate": "cubicOut",
+            "animationDelayUpdate": 0
+        }
+    ],
+    "title": [
+        {
+            "show": true,
+            "text": "\u5019\u9009\u7b56\u7565\uff1a\u8d44\u672c\u5229\u5f97\u56de\u64a4\u4e0e\u8d44\u672c\u5229\u5f97\u8d85\u989d",
+            "target": "blank",
+            "subtarget": "blank",
+            "padding": 5,
+            "itemGap": 10,
+            "textAlign": "auto",
+            "textVerticalAlign": "auto",
+            "triggerEvent": false
+        }
+    ]
+};
+        chart_4a21915365ae4a178031e707b9f3d47e.setOption(option_4a21915365ae4a178031e707b9f3d47e);
+            window.addEventListener('resize', function(){
+                chart_4a21915365ae4a178031e707b9f3d47e.resize();
+            })
+    </script>
+</body>
+</html>
+</div>
+<h2>目标函数Top20</h2><div class="table-wrap"><table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>实验编号</th>
+      <th>实验阶段</th>
+      <th>调整模块</th>
+      <th>候选参数</th>
+      <th>供给低分位</th>
+      <th>供给高分位</th>
+      <th>需求低分位</th>
+      <th>需求高分位</th>
+      <th>地方债国债利差低分位</th>
+      <th>地方债国债利差高分位</th>
+      <th>地方债NCD利差低分位</th>
+      <th>地方债NCD利差高分位</th>
+      <th>利差周变化阈值_BP</th>
+      <th>看空总分阈值</th>
+      <th>看空最少利空模块数</th>
+      <th>看空要求供给或需求利空</th>
+      <th>看空连续确认周数</th>
+      <th>目标函数</th>
+      <th>策略累计收益率</th>
+      <th>基准累计收益率</th>
+      <th>累计超额收益率</th>
+      <th>策略年化收益率</th>
+      <th>策略夏普比率</th>
+      <th>策略最大回撤</th>
+      <th>累计资本利得_BP</th>
+      <th>基准累计资本利得_BP</th>
+      <th>资本利得超额_BP</th>
+      <th>资本利得交易胜率</th>
+      <th>开仓交易总数</th>
+      <th>已平仓交易数</th>
+      <th>平均单笔资本利得_BP</th>
+      <th>最佳交易_BP</th>
+      <th>最差交易_BP</th>
+      <th>资本利得最大回撤_BP</th>
+      <th>未平仓交易数</th>
+      <th>未平仓浮动资本利得_BP</th>
+      <th>调仓周期胜率</th>
+      <th>看空信号数</th>
+      <th>相对基线变化信号数</th>
+      <th>策略Carry贡献</th>
+      <th>策略资本利得贡献</th>
+      <th>最新总分</th>
+      <th>最新仓位</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>银行需求分位阈值_30/70</td>
+      <td>单模块敏感性</td>
+      <td>银行需求分位阈值</td>
+      <td>30/70</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>30.0</td>
+      <td>70.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>30.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>139.03886</td>
+      <td>2.90%</td>
+      <td>2.54%</td>
+      <td>0.36%</td>
+      <td>2.03%</td>
+      <td>0.817774</td>
+      <td>-0.22%</td>
+      <td>245.99</td>
+      <td>-37.15</td>
+      <td>283.14</td>
+      <td>100.00%</td>
+      <td>9</td>
+      <td>9</td>
+      <td>27.33</td>
+      <td>99.30</td>
+      <td>5.38</td>
+      <td>-22.46</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>14.47%</td>
+      <td>10</td>
+      <td>1</td>
+      <td>0.004039</td>
+      <td>0.024599</td>
+      <td>32.5</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>看空<15_仅总分</td>
+      <td>看空触发条件</td>
+      <td>总分与确认规则</td>
+      <td>仅总分</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>30.0</td>
+      <td>70.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>15.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>139.03886</td>
+      <td>2.90%</td>
+      <td>2.54%</td>
+      <td>0.36%</td>
+      <td>2.03%</td>
+      <td>0.817774</td>
+      <td>-0.22%</td>
+      <td>245.99</td>
+      <td>-37.15</td>
+      <td>283.14</td>
+      <td>100.00%</td>
+      <td>9</td>
+      <td>9</td>
+      <td>27.33</td>
+      <td>99.30</td>
+      <td>5.38</td>
+      <td>-22.46</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>14.47%</td>
+      <td>3</td>
+      <td>1</td>
+      <td>0.004039</td>
+      <td>0.024599</td>
+      <td>32.5</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>看空<15_至少2个模块利空</td>
+      <td>看空触发条件</td>
+      <td>总分与确认规则</td>
+      <td>至少2个模块利空</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>30.0</td>
+      <td>70.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>15.0</td>
+      <td>2</td>
+      <td>0</td>
+      <td>1</td>
+      <td>139.03886</td>
+      <td>2.90%</td>
+      <td>2.54%</td>
+      <td>0.36%</td>
+      <td>2.03%</td>
+      <td>0.817774</td>
+      <td>-0.22%</td>
+      <td>245.99</td>
+      <td>-37.15</td>
+      <td>283.14</td>
+      <td>100.00%</td>
+      <td>9</td>
+      <td>9</td>
+      <td>27.33</td>
+      <td>99.30</td>
+      <td>5.38</td>
+      <td>-22.46</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>14.47%</td>
+      <td>3</td>
+      <td>1</td>
+      <td>0.004039</td>
+      <td>0.024599</td>
+      <td>32.5</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>看空<15_必须包含供给或需求利空</td>
+      <td>看空触发条件</td>
+      <td>总分与确认规则</td>
+      <td>必须包含供给或需求利空</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>30.0</td>
+      <td>70.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>15.0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>1</td>
+      <td>139.03886</td>
+      <td>2.90%</td>
+      <td>2.54%</td>
+      <td>0.36%</td>
+      <td>2.03%</td>
+      <td>0.817774</td>
+      <td>-0.22%</td>
+      <td>245.99</td>
+      <td>-37.15</td>
+      <td>283.14</td>
+      <td>100.00%</td>
+      <td>9</td>
+      <td>9</td>
+      <td>27.33</td>
+      <td>99.30</td>
+      <td>5.38</td>
+      <td>-22.46</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>14.47%</td>
+      <td>3</td>
+      <td>1</td>
+      <td>0.004039</td>
+      <td>0.024599</td>
+      <td>32.5</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>看空<15_至少2个模块且包含供需利空</td>
+      <td>看空触发条件</td>
+      <td>总分与确认规则</td>
+      <td>至少2个模块且包含供需利空</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>30.0</td>
+      <td>70.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>15.0</td>
+      <td>2</td>
+      <td>1</td>
+      <td>1</td>
+      <td>139.03886</td>
+      <td>2.90%</td>
+      <td>2.54%</td>
+      <td>0.36%</td>
+      <td>2.03%</td>
+      <td>0.817774</td>
+      <td>-0.22%</td>
+      <td>245.99</td>
+      <td>-37.15</td>
+      <td>283.14</td>
+      <td>100.00%</td>
+      <td>9</td>
+      <td>9</td>
+      <td>27.33</td>
+      <td>99.30</td>
+      <td>5.38</td>
+      <td>-22.46</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>14.47%</td>
+      <td>3</td>
+      <td>1</td>
+      <td>0.004039</td>
+      <td>0.024599</td>
+      <td>32.5</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>看空<15_连续2周看空</td>
+      <td>看空触发条件</td>
+      <td>总分与确认规则</td>
+      <td>连续2周看空</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>30.0</td>
+      <td>70.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>15.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>2</td>
+      <td>139.03886</td>
+      <td>2.90%</td>
+      <td>2.54%</td>
+      <td>0.36%</td>
+      <td>2.03%</td>
+      <td>0.817774</td>
+      <td>-0.22%</td>
+      <td>245.99</td>
+      <td>-37.15</td>
+      <td>283.14</td>
+      <td>100.00%</td>
+      <td>9</td>
+      <td>9</td>
+      <td>27.33</td>
+      <td>99.30</td>
+      <td>5.38</td>
+      <td>-22.46</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>14.47%</td>
+      <td>1</td>
+      <td>1</td>
+      <td>0.004039</td>
+      <td>0.024599</td>
+      <td>32.5</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>看空<20_仅总分</td>
+      <td>看空触发条件</td>
+      <td>总分与确认规则</td>
+      <td>仅总分</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>30.0</td>
+      <td>70.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>20.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>139.03886</td>
+      <td>2.90%</td>
+      <td>2.54%</td>
+      <td>0.36%</td>
+      <td>2.03%</td>
+      <td>0.817774</td>
+      <td>-0.22%</td>
+      <td>245.99</td>
+      <td>-37.15</td>
+      <td>283.14</td>
+      <td>100.00%</td>
+      <td>9</td>
+      <td>9</td>
+      <td>27.33</td>
+      <td>99.30</td>
+      <td>5.38</td>
+      <td>-22.46</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>14.47%</td>
+      <td>6</td>
+      <td>1</td>
+      <td>0.004039</td>
+      <td>0.024599</td>
+      <td>32.5</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>看空<20_至少2个模块利空</td>
+      <td>看空触发条件</td>
+      <td>总分与确认规则</td>
+      <td>至少2个模块利空</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>30.0</td>
+      <td>70.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>20.0</td>
+      <td>2</td>
+      <td>0</td>
+      <td>1</td>
+      <td>139.03886</td>
+      <td>2.90%</td>
+      <td>2.54%</td>
+      <td>0.36%</td>
+      <td>2.03%</td>
+      <td>0.817774</td>
+      <td>-0.22%</td>
+      <td>245.99</td>
+      <td>-37.15</td>
+      <td>283.14</td>
+      <td>100.00%</td>
+      <td>9</td>
+      <td>9</td>
+      <td>27.33</td>
+      <td>99.30</td>
+      <td>5.38</td>
+      <td>-22.46</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>14.47%</td>
+      <td>4</td>
+      <td>1</td>
+      <td>0.004039</td>
+      <td>0.024599</td>
+      <td>32.5</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>看空<20_必须包含供给或需求利空</td>
+      <td>看空触发条件</td>
+      <td>总分与确认规则</td>
+      <td>必须包含供给或需求利空</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>30.0</td>
+      <td>70.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>20.0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>1</td>
+      <td>139.03886</td>
+      <td>2.90%</td>
+      <td>2.54%</td>
+      <td>0.36%</td>
+      <td>2.03%</td>
+      <td>0.817774</td>
+      <td>-0.22%</td>
+      <td>245.99</td>
+      <td>-37.15</td>
+      <td>283.14</td>
+      <td>100.00%</td>
+      <td>9</td>
+      <td>9</td>
+      <td>27.33</td>
+      <td>99.30</td>
+      <td>5.38</td>
+      <td>-22.46</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>14.47%</td>
+      <td>6</td>
+      <td>1</td>
+      <td>0.004039</td>
+      <td>0.024599</td>
+      <td>32.5</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>看空<20_至少2个模块且包含供需利空</td>
+      <td>看空触发条件</td>
+      <td>总分与确认规则</td>
+      <td>至少2个模块且包含供需利空</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>30.0</td>
+      <td>70.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>20.0</td>
+      <td>2</td>
+      <td>1</td>
+      <td>1</td>
+      <td>139.03886</td>
+      <td>2.90%</td>
+      <td>2.54%</td>
+      <td>0.36%</td>
+      <td>2.03%</td>
+      <td>0.817774</td>
+      <td>-0.22%</td>
+      <td>245.99</td>
+      <td>-37.15</td>
+      <td>283.14</td>
+      <td>100.00%</td>
+      <td>9</td>
+      <td>9</td>
+      <td>27.33</td>
+      <td>99.30</td>
+      <td>5.38</td>
+      <td>-22.46</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>14.47%</td>
+      <td>4</td>
+      <td>1</td>
+      <td>0.004039</td>
+      <td>0.024599</td>
+      <td>32.5</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>看空<20_连续2周看空</td>
+      <td>看空触发条件</td>
+      <td>总分与确认规则</td>
+      <td>连续2周看空</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>30.0</td>
+      <td>70.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>20.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>2</td>
+      <td>139.03886</td>
+      <td>2.90%</td>
+      <td>2.54%</td>
+      <td>0.36%</td>
+      <td>2.03%</td>
+      <td>0.817774</td>
+      <td>-0.22%</td>
+      <td>245.99</td>
+      <td>-37.15</td>
+      <td>283.14</td>
+      <td>100.00%</td>
+      <td>9</td>
+      <td>9</td>
+      <td>27.33</td>
+      <td>99.30</td>
+      <td>5.38</td>
+      <td>-22.46</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>14.47%</td>
+      <td>2</td>
+      <td>1</td>
+      <td>0.004039</td>
+      <td>0.024599</td>
+      <td>32.5</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>看空<25_仅总分</td>
+      <td>看空触发条件</td>
+      <td>总分与确认规则</td>
+      <td>仅总分</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>30.0</td>
+      <td>70.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>25.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>139.03886</td>
+      <td>2.90%</td>
+      <td>2.54%</td>
+      <td>0.36%</td>
+      <td>2.03%</td>
+      <td>0.817774</td>
+      <td>-0.22%</td>
+      <td>245.99</td>
+      <td>-37.15</td>
+      <td>283.14</td>
+      <td>100.00%</td>
+      <td>9</td>
+      <td>9</td>
+      <td>27.33</td>
+      <td>99.30</td>
+      <td>5.38</td>
+      <td>-22.46</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>14.47%</td>
+      <td>9</td>
+      <td>1</td>
+      <td>0.004039</td>
+      <td>0.024599</td>
+      <td>32.5</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>看空<25_至少2个模块利空</td>
+      <td>看空触发条件</td>
+      <td>总分与确认规则</td>
+      <td>至少2个模块利空</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>30.0</td>
+      <td>70.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>25.0</td>
+      <td>2</td>
+      <td>0</td>
+      <td>1</td>
+      <td>139.03886</td>
+      <td>2.90%</td>
+      <td>2.54%</td>
+      <td>0.36%</td>
+      <td>2.03%</td>
+      <td>0.817774</td>
+      <td>-0.22%</td>
+      <td>245.99</td>
+      <td>-37.15</td>
+      <td>283.14</td>
+      <td>100.00%</td>
+      <td>9</td>
+      <td>9</td>
+      <td>27.33</td>
+      <td>99.30</td>
+      <td>5.38</td>
+      <td>-22.46</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>14.47%</td>
+      <td>7</td>
+      <td>1</td>
+      <td>0.004039</td>
+      <td>0.024599</td>
+      <td>32.5</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>看空<25_必须包含供给或需求利空</td>
+      <td>看空触发条件</td>
+      <td>总分与确认规则</td>
+      <td>必须包含供给或需求利空</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>30.0</td>
+      <td>70.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>25.0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>1</td>
+      <td>139.03886</td>
+      <td>2.90%</td>
+      <td>2.54%</td>
+      <td>0.36%</td>
+      <td>2.03%</td>
+      <td>0.817774</td>
+      <td>-0.22%</td>
+      <td>245.99</td>
+      <td>-37.15</td>
+      <td>283.14</td>
+      <td>100.00%</td>
+      <td>9</td>
+      <td>9</td>
+      <td>27.33</td>
+      <td>99.30</td>
+      <td>5.38</td>
+      <td>-22.46</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>14.47%</td>
+      <td>9</td>
+      <td>1</td>
+      <td>0.004039</td>
+      <td>0.024599</td>
+      <td>32.5</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>看空<25_至少2个模块且包含供需利空</td>
+      <td>看空触发条件</td>
+      <td>总分与确认规则</td>
+      <td>至少2个模块且包含供需利空</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>30.0</td>
+      <td>70.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>25.0</td>
+      <td>2</td>
+      <td>1</td>
+      <td>1</td>
+      <td>139.03886</td>
+      <td>2.90%</td>
+      <td>2.54%</td>
+      <td>0.36%</td>
+      <td>2.03%</td>
+      <td>0.817774</td>
+      <td>-0.22%</td>
+      <td>245.99</td>
+      <td>-37.15</td>
+      <td>283.14</td>
+      <td>100.00%</td>
+      <td>9</td>
+      <td>9</td>
+      <td>27.33</td>
+      <td>99.30</td>
+      <td>5.38</td>
+      <td>-22.46</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>14.47%</td>
+      <td>7</td>
+      <td>1</td>
+      <td>0.004039</td>
+      <td>0.024599</td>
+      <td>32.5</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>看空<25_连续2周看空</td>
+      <td>看空触发条件</td>
+      <td>总分与确认规则</td>
+      <td>连续2周看空</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>30.0</td>
+      <td>70.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>25.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>2</td>
+      <td>139.03886</td>
+      <td>2.90%</td>
+      <td>2.54%</td>
+      <td>0.36%</td>
+      <td>2.03%</td>
+      <td>0.817774</td>
+      <td>-0.22%</td>
+      <td>245.99</td>
+      <td>-37.15</td>
+      <td>283.14</td>
+      <td>100.00%</td>
+      <td>9</td>
+      <td>9</td>
+      <td>27.33</td>
+      <td>99.30</td>
+      <td>5.38</td>
+      <td>-22.46</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>14.47%</td>
+      <td>4</td>
+      <td>1</td>
+      <td>0.004039</td>
+      <td>0.024599</td>
+      <td>32.5</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>看空<30_仅总分</td>
+      <td>看空触发条件</td>
+      <td>总分与确认规则</td>
+      <td>仅总分</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>30.0</td>
+      <td>70.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>30.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>139.03886</td>
+      <td>2.90%</td>
+      <td>2.54%</td>
+      <td>0.36%</td>
+      <td>2.03%</td>
+      <td>0.817774</td>
+      <td>-0.22%</td>
+      <td>245.99</td>
+      <td>-37.15</td>
+      <td>283.14</td>
+      <td>100.00%</td>
+      <td>9</td>
+      <td>9</td>
+      <td>27.33</td>
+      <td>99.30</td>
+      <td>5.38</td>
+      <td>-22.46</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>14.47%</td>
+      <td>10</td>
+      <td>1</td>
+      <td>0.004039</td>
+      <td>0.024599</td>
+      <td>32.5</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>看空<30_至少2个模块利空</td>
+      <td>看空触发条件</td>
+      <td>总分与确认规则</td>
+      <td>至少2个模块利空</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>30.0</td>
+      <td>70.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>30.0</td>
+      <td>2</td>
+      <td>0</td>
+      <td>1</td>
+      <td>139.03886</td>
+      <td>2.90%</td>
+      <td>2.54%</td>
+      <td>0.36%</td>
+      <td>2.03%</td>
+      <td>0.817774</td>
+      <td>-0.22%</td>
+      <td>245.99</td>
+      <td>-37.15</td>
+      <td>283.14</td>
+      <td>100.00%</td>
+      <td>9</td>
+      <td>9</td>
+      <td>27.33</td>
+      <td>99.30</td>
+      <td>5.38</td>
+      <td>-22.46</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>14.47%</td>
+      <td>8</td>
+      <td>1</td>
+      <td>0.004039</td>
+      <td>0.024599</td>
+      <td>32.5</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>看空<30_必须包含供给或需求利空</td>
+      <td>看空触发条件</td>
+      <td>总分与确认规则</td>
+      <td>必须包含供给或需求利空</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>30.0</td>
+      <td>70.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>30.0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>1</td>
+      <td>139.03886</td>
+      <td>2.90%</td>
+      <td>2.54%</td>
+      <td>0.36%</td>
+      <td>2.03%</td>
+      <td>0.817774</td>
+      <td>-0.22%</td>
+      <td>245.99</td>
+      <td>-37.15</td>
+      <td>283.14</td>
+      <td>100.00%</td>
+      <td>9</td>
+      <td>9</td>
+      <td>27.33</td>
+      <td>99.30</td>
+      <td>5.38</td>
+      <td>-22.46</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>14.47%</td>
+      <td>10</td>
+      <td>1</td>
+      <td>0.004039</td>
+      <td>0.024599</td>
+      <td>32.5</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>看空<30_至少2个模块且包含供需利空</td>
+      <td>看空触发条件</td>
+      <td>总分与确认规则</td>
+      <td>至少2个模块且包含供需利空</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>30.0</td>
+      <td>70.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>30.0</td>
+      <td>2</td>
+      <td>1</td>
+      <td>1</td>
+      <td>139.03886</td>
+      <td>2.90%</td>
+      <td>2.54%</td>
+      <td>0.36%</td>
+      <td>2.03%</td>
+      <td>0.817774</td>
+      <td>-0.22%</td>
+      <td>245.99</td>
+      <td>-37.15</td>
+      <td>283.14</td>
+      <td>100.00%</td>
+      <td>9</td>
+      <td>9</td>
+      <td>27.33</td>
+      <td>99.30</td>
+      <td>5.38</td>
+      <td>-22.46</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>14.47%</td>
+      <td>8</td>
+      <td>1</td>
+      <td>0.004039</td>
+      <td>0.024599</td>
+      <td>32.5</td>
+      <td>0.0</td>
+    </tr>
+  </tbody>
+</table></div>
+<h2>如何解读</h2><p class="lead">单模块表同时展示资本利得BP、资本利得超额和逐笔胜率。目标函数改善为零的模块不应机械改阈值；只有形成稳定平台、而非单一尖峰的参数才值得保留。当前仍属于同一样本内研究，历史数据扩展完成前，不把结果视为样本外有效性证明。</p>
+</main></body></html>

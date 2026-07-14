@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.streamlit/secrets.toml
+streamlit-deploy*.log
+backtest_outputs/search_page_draft.json
+backtest_outputs/dashboard_weight_search_v1/all_results.csv
+backtest_outputs/阈值调参实验_v1/全部阈值实验结果.csv
