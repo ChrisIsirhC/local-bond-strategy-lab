@@ -93,7 +93,10 @@ def main() -> None:
     if save_clicked:
         _save_config(config)
     if run_clicked:
-        _run_backtest(config)
+        experiment_dir = _run_backtest(config)
+        if experiment_dir is not None:
+            st.query_params["view"] = f"history_result__{experiment_dir.name}"
+            st.rerun()
 
     result = st.session_state.get(RESULT_STATE_KEY)
     _render_header(config, result, "home")
@@ -694,7 +697,7 @@ def _next_available_config_path(path: Path) -> Path:
     raise RuntimeError("同名配置版本过多，请更换策略配置名称。")
 
 
-def _run_backtest(config: DashboardStrategyConfig) -> None:
+def _run_backtest(config: DashboardStrategyConfig) -> Path | None:
     try:
         with st.spinner("正在计算收益、归因与调仓周期诊断..."):
             daily, signals, strategy_metrics, benchmark_metrics = run_dashboard_config(ROOT, config)
@@ -719,8 +722,10 @@ def _run_backtest(config: DashboardStrategyConfig) -> None:
             config,
         )
         st.toast(f"实验已归档：{experiment_dir.name}")
+        return experiment_dir
     except Exception as exc:
         st.error(f"回测运行失败：{exc}")
+        return None
 
 
 def _render_header(config: DashboardStrategyConfig | None, result: object, view: str) -> None:
@@ -959,9 +964,10 @@ def _render_historical_result_page(experiment_id: str) -> None:
     if save_clicked:
         _save_config(edited_config)
     if run_clicked:
-        _run_backtest(edited_config)
-        st.query_params["view"] = "home"
-        st.rerun()
+        new_experiment_dir = _run_backtest(edited_config)
+        if new_experiment_dir is not None:
+            st.query_params["view"] = f"history_result__{new_experiment_dir.name}"
+            st.rerun()
     _render_header(config, True, "history")
     st.markdown(
         f'<div class="archive-breadcrumb"><a href="?view=history" target="_self">历史实验</a><span>/</span><strong>{escape(config.name)}</strong></div>',
