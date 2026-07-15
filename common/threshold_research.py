@@ -8,9 +8,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from common.bond_return import BondReturnConfig, build_total_return_index, load_yield_curve
 from common.config import DashboardStrategyConfig, ObjectiveConfig, load_strategy_config, save_strategy_config
 from common.experiments import archive_dashboard_experiment
+from common.market_data import load_market_data
 from common.reporting import _build_period_diagnostics, write_strategy_outputs
 from common.runner import run_dashboard_config
 from common.trade_metrics import select_executed_weekly_positions, vectorized_capital_trade_metrics
@@ -92,8 +92,9 @@ def run_threshold_research(
         objective=objective_config or selected_base.objective,
         backtest_start=None,
         backtest_end=None,
+        benchmark_id=selected_base.benchmark_id,
     )
-    context = _build_search_context(root)
+    context = _build_search_context(root, base_config.benchmark_id)
     module_options = _module_options(context["factor_values"], base_config.thresholds)
 
     stage1_candidates = [_candidate(base_config, "阈值原始基线", "基线", "全部")]
@@ -243,7 +244,7 @@ def run_threshold_research(
     }
 
 
-def _build_search_context(root: Path) -> dict[str, object]:
+def _build_search_context(root: Path, benchmark_id: str) -> dict[str, object]:
     signal_path = root / "data_processed" / "图表指标_周度宽表_统一日期.csv"
     raw = pd.read_csv(signal_path, encoding="utf-8-sig")
     factor_values = pd.DataFrame(
@@ -261,11 +262,10 @@ def _build_search_context(root: Path) -> dict[str, object]:
         }
     ).sort_values("signal_date").reset_index(drop=True)
 
-    yield_curve = load_yield_curve(root / "benchmark_data" / "地方政府债到期收益率_10年_2024至最新.csv")
-    benchmark = build_total_return_index(yield_curve, BondReturnConfig())
+    market = load_market_data(root, benchmark_id)
     mapping = factor_values[["signal_date"]].reset_index(names="signal_index")
     daily = pd.merge_asof(
-        benchmark.sort_values("date"),
+        market.sort_values("date"),
         mapping.sort_values("signal_date"),
         left_on="date",
         right_on="signal_date",
@@ -390,12 +390,14 @@ def _evaluate_candidates(
         weekly_positions, signal_index
     )
     daily_positions = weekly_positions[:, signal_index]
-    daily_returns = pd.to_numeric(daily["total_return"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+    daily_returns = pd.to_numeric(daily["asset_total_return"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
     returns = daily_positions * daily_returns[None, :]
-    daily_capital_returns = pd.to_numeric(daily["duration_pnl"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+    daily_capital_returns = pd.to_numeric(daily["asset_duration_pnl"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
     capital_returns = daily_positions * daily_capital_returns[None, :]
+    benchmark_daily_returns = pd.to_numeric(daily["total_return"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+    benchmark_daily_capital_returns = pd.to_numeric(daily["duration_pnl"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
     nav = np.cumprod(1.0 + returns, axis=1)
-    benchmark_nav = np.cumprod(1.0 + daily_returns)
+    benchmark_nav = np.cumprod(1.0 + benchmark_daily_returns)
     periods = max(len(daily_returns) - 1, 1)
     total_return = nav[:, -1] / nav[:, 0] - 1.0
     benchmark_total_return = float(benchmark_nav[-1] / benchmark_nav[0] - 1.0)
@@ -416,7 +418,7 @@ def _evaluate_candidates(
         capital_trade_columns.append(capital_returns[:, signal_index == signal_id].sum(axis=1) * 10000.0)
     capital_trade_bp = np.column_stack(capital_trade_columns)
     capital_gain_bp = capital_returns.sum(axis=1) * 10000.0
-    benchmark_capital_gain_bp = float(daily_capital_returns.sum() * 10000.0)
+    benchmark_capital_gain_bp = float(benchmark_daily_capital_returns.sum() * 10000.0)
     capital_gain_excess_bp = capital_gain_bp - benchmark_capital_gain_bp
     trade_stats = vectorized_capital_trade_metrics(executed_weekly_positions, capital_trade_bp)
     capital_trade_win_rate = np.nan_to_num(trade_stats["trade_win_rate"], nan=0.0)
@@ -435,8 +437,8 @@ def _evaluate_candidates(
         + objective_config.capital_trade_win_rate_weight * capital_trade_win_rate
         + objective_config.capital_gain_drawdown_bp_penalty * capital_gain_max_drawdown_bp
     )
-    carry = pd.to_numeric(daily["carry_return"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
-    capital = pd.to_numeric(daily["duration_pnl"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+    carry = pd.to_numeric(daily["asset_carry_return"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+    capital = pd.to_numeric(daily["asset_duration_pnl"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
 
     result = params.copy()
     result["objective"] = objective
@@ -553,6 +555,7 @@ def _config_from_result(base: DashboardStrategyConfig, row: pd.Series) -> Dashbo
         thresholds=thresholds,
         positions=positions,
         objective=base.objective,
+        benchmark_id=base.benchmark_id,
     )
 
 

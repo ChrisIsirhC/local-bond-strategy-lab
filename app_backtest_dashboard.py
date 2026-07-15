@@ -21,6 +21,7 @@ from common.config import (
     strategy_config_from_dict,
 )
 from common.experiments import archive_dashboard_experiment, list_experiments, load_experiment_result
+from common.market_data import CURVE_SPECS, DEFAULT_BENCHMARK_ID, benchmark_label, load_market_data, market_date_bounds
 from common.reporting import _build_period_diagnostics
 from common.runner import run_dashboard_config
 from common.runner import run_dashboard_weight_search_v1
@@ -471,21 +472,14 @@ def _select_config() -> Path:
 
 
 @st.cache_data(show_spinner=False)
-def _benchmark_date_bounds() -> tuple[object, object]:
-    path = ROOT / "benchmark_data" / "地方政府债到期收益率_10年_2024至最新.csv"
-    dates = pd.to_datetime(pd.read_csv(path, encoding="utf-8-sig", usecols=["日期"])["日期"], errors="coerce").dropna()
-    if dates.empty:
-        raise ValueError("基准收益率文件没有可用日期")
-    return dates.min().date(), dates.max().date()
+def _benchmark_date_bounds(benchmark_id: str = DEFAULT_BENCHMARK_ID) -> tuple[object, object]:
+    return market_date_bounds(ROOT, benchmark_id)
 
 
 @st.cache_data(show_spinner=False)
 def _full_strategy_date_bounds() -> tuple[str, str]:
-    benchmark_path = ROOT / "benchmark_data" / "地方政府债到期收益率_10年_2024至最新.csv"
     signal_path = ROOT / "data_processed" / "图表指标_周度宽表_统一日期.csv"
-    benchmark_dates = pd.to_datetime(
-        pd.read_csv(benchmark_path, encoding="utf-8-sig", usecols=["日期"])["日期"], errors="coerce"
-    ).dropna().sort_values()
+    benchmark_dates = load_market_data(ROOT, DEFAULT_BENCHMARK_ID)["date"]
     signal_dates = pd.to_datetime(
         pd.read_csv(signal_path, encoding="utf-8-sig", usecols=["信号日期"])["信号日期"], errors="coerce"
     ).dropna()
@@ -516,7 +510,16 @@ def _sidebar_config(
         save_clicked = save_col.button("保存配置", type="primary", use_container_width=True, key=widget_key("save_config"))
         st.caption("先命名，再保存；运行使用当前页面参数。")
 
-    available_start, available_end = _benchmark_date_bounds()
+    benchmark_ids = list(CURVE_SPECS)
+    selected_benchmark = st.sidebar.selectbox(
+        "比较基准",
+        benchmark_ids,
+        index=benchmark_ids.index(base.benchmark_id) if base.benchmark_id in benchmark_ids else 0,
+        format_func=benchmark_label,
+        help="策略交易标的固定为10Y地方政府债；此处只选择绩效比较基准。",
+        key=widget_key("benchmark_id"),
+    )
+    available_start, available_end = _benchmark_date_bounds(selected_benchmark)
     initial_start = pd.Timestamp(base.backtest_start or default_start or available_start).date()
     initial_end = pd.Timestamp(base.backtest_end or default_end or available_end).date()
     initial_start = max(available_start, min(initial_start, available_end))
@@ -622,8 +625,12 @@ def _sidebar_config(
     }
     if selected_window != base_window:
         changed_groups.append("backtest")
+    if selected_benchmark != base.benchmark_id:
+        changed_groups.append("benchmark")
     if effective_name == base.name and changed_groups:
-        effective_name = _suggest_variant_name(base, weight_values, threshold_values, position_values, changed_groups, selected_window)
+        effective_name = _suggest_variant_name(
+            base, weight_values, threshold_values, position_values, changed_groups, selected_window, selected_benchmark
+        )
         st.sidebar.info(f"保存时自动更名：{effective_name}")
 
     config = DashboardStrategyConfig(
@@ -634,6 +641,7 @@ def _sidebar_config(
         objective=ObjectiveConfig(**objective_values),
         backtest_start=selected_window["start_date"],
         backtest_end=selected_window["end_date"],
+        benchmark_id=selected_benchmark,
     )
     return config, run_clicked, save_clicked
 
@@ -645,6 +653,7 @@ def _suggest_variant_name(
     positions: dict[str, float | int],
     changed_groups: list[str],
     backtest: dict[str, str],
+    selected_benchmark: str,
 ) -> str:
     tags: list[str] = []
     if "weights" in changed_groups:
@@ -671,6 +680,8 @@ def _suggest_variant_name(
         tags.append("搜索目标调整")
     if "backtest" in changed_groups:
         tags.append(f"区间{backtest['start_date'].replace('-', '')}-{backtest['end_date'].replace('-', '')}")
+    if "benchmark" in changed_groups:
+        tags.append(f"基准{benchmark_label(selected_benchmark)}")
     return f"{base.name}__改_{'_'.join(tags)}"
 
 
@@ -784,6 +795,7 @@ def _render_launch_details(config: DashboardStrategyConfig) -> None:
                 <div class="config-line"><span>看多触发</span><strong>总分 ≥ {config.positions.bullish_threshold:.0f}</strong></div>
                 <div class="config-line"><span>看空触发</span><strong>总分 &lt; {config.positions.bearish_threshold:.0f}</strong></div>
                 <div class="config-line"><span>仓位档位</span><strong>{config.positions.bullish_position:.1f} / {config.positions.neutral_position:.1f} / {config.positions.bearish_position:.1f}</strong></div>
+                <div class="config-line"><span>比较基准</span><strong>{escape(benchmark_label(config.benchmark_id))}</strong></div>
                 <div class="config-line"><span>权重总和</span><strong>{sum(config.weights.as_dict().values()):.0f}</strong></div>
             </article>
         </section>
@@ -797,6 +809,7 @@ def _render_summary(strategy_metrics: dict[str, object], benchmark_metrics: dict
     latest = signals.iloc[-1]
     capital_bp = float(strategy_metrics["capital_gain_total_bp"])
     benchmark_capital_bp = float(benchmark_metrics["capital_gain_total_bp"])
+    benchmark_name = str(benchmark_metrics.get("benchmark_name", "10Y地方政府债"))
     capital_win_rate = strategy_metrics.get("capital_gain_trade_win_rate")
     average_trade_bp = strategy_metrics.get("capital_gain_avg_trade_bp")
     capital_drawdown_bp = strategy_metrics.get("capital_gain_max_drawdown_bp")
@@ -821,10 +834,10 @@ def _render_summary(strategy_metrics: dict[str, object], benchmark_metrics: dict
             </aside>
         </section>
         <section class="metric-grid">
-            {_metric_cell('累计资本利得', f'{capital_bp:.2f} BP', f'满仓基准 {benchmark_capital_bp:.2f} BP', capital_bp)}
+            {_metric_cell('累计资本利得', f'{capital_bp:.2f} BP', f'{benchmark_name} {benchmark_capital_bp:.2f} BP', capital_bp)}
             {_metric_cell('已平仓交易胜率', win_rate_text, f"盈利 {strategy_metrics['capital_gain_winning_trades']:.0f} / 已平仓 {strategy_metrics['capital_gain_closed_trade_count']:.0f} 笔", 0.0 if capital_win_rate is None else float(capital_win_rate) - 0.5)}
             {_metric_cell('平均单笔资本利得', average_trade_text, '盈亏比暂无' if payoff is None else f"盈亏比 {float(payoff):.2f}", 0.0 if average_trade_bp is None else float(average_trade_bp))}
-            {_metric_cell('资本利得最大回撤', capital_drawdown_text, f"满仓基准 {float(benchmark_metrics.get('capital_gain_max_drawdown_bp', 0.0)):.2f} BP", 0.0 if capital_drawdown_bp is None else float(capital_drawdown_bp))}
+            {_metric_cell('资本利得最大回撤', capital_drawdown_text, f"{benchmark_name} {float(benchmark_metrics.get('capital_gain_max_drawdown_bp', 0.0)):.2f} BP", 0.0 if capital_drawdown_bp is None else float(capital_drawdown_bp))}
         </section>
         """,
         unsafe_allow_html=True,
@@ -1146,7 +1159,7 @@ def _render_experiment_history(show_report: bool = False) -> None:
     display = display.drop(columns=["实验目录"])
     display = display[
         [
-            "打开结果", "运行时间", "策略名称", "运行来源", "回测区间", "累计资本利得_BP", "资本利得超额_BP",
+            "打开结果", "运行时间", "策略名称", "比较基准", "运行来源", "回测区间", "累计资本利得_BP", "资本利得超额_BP",
             "资本利得交易胜率", "已平仓交易数", "平均单笔资本利得_BP", "资本利得最大回撤_BP",
             "策略累计收益率", "最大回撤", "夏普比率",
         ]
@@ -1213,6 +1226,7 @@ def _render_search_page() -> None:
         objective=objective,
         backtest_start=None,
         backtest_end=None,
+        benchmark_id=baseline.benchmark_id,
     )
     _persist_search_draft(baseline, st.session_state.get("search_draft_source_path", ""))
     left, right = st.columns(2)
@@ -1296,6 +1310,16 @@ def _search_baseline_controls() -> DashboardStrategyConfig:
         "所有搜索强制使用完整历史；普通历史回测归档不会自动加入此下拉框。"
     )
 
+    benchmark_ids = list(CURVE_SPECS)
+    selected_benchmark = st.selectbox(
+        "搜索比较基准",
+        benchmark_ids,
+        index=benchmark_ids.index(base.benchmark_id) if base.benchmark_id in benchmark_ids else 0,
+        format_func=benchmark_label,
+        help="候选策略始终交易10Y地方政府债；搜索目标中的超额指标相对该基准计算。",
+        key=f"{key_prefix}_benchmark_id",
+    )
+
     with st.expander("因子权重", expanded=True):
         columns = st.columns(3)
         weight_values: dict[str, float] = {}
@@ -1343,11 +1367,12 @@ def _search_baseline_controls() -> DashboardStrategyConfig:
     return DashboardStrategyConfig(
         name=f"搜索基线_{base.name}", weights=DashboardWeights(**weight_values),
         thresholds=DashboardThresholds(**threshold_values), positions=DashboardPositionPolicy(**position_values),
-        objective=base.objective, backtest_start=None, backtest_end=None,
+        objective=base.objective, backtest_start=None, backtest_end=None, benchmark_id=selected_benchmark,
     )
 
 
 def _seed_search_draft(base: DashboardStrategyConfig) -> None:
+    st.session_state["search_draft_benchmark_id"] = base.benchmark_id
     for key, value in base.weights.as_dict().items():
         st.session_state[f"search_draft_weight_{key}"] = float(value)
     for key, value in base.thresholds.as_dict().items():

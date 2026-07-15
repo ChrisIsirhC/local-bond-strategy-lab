@@ -8,6 +8,7 @@ import pandas as pd
 from common.bond_return import BondReturnConfig, build_total_return_index, load_yield_curve
 from common.config import DashboardStrategyConfig, ObjectiveConfig, save_strategy_config
 from common.experiments import archive_dashboard_experiment
+from common.market_data import DEFAULT_BENCHMARK_ID, curve_path, load_market_data
 from common.performance import performance_metrics
 from common.reporting import write_outputs, write_strategy_outputs
 from common.trade_metrics import capital_gain_trade_metrics, select_executed_weekly_positions, vectorized_capital_trade_metrics
@@ -17,7 +18,7 @@ from strategies.position_policy import DEFAULT_POSITION_POLICY
 
 
 def run_hold_10y_benchmark(root: Path) -> dict[str, object]:
-    data_path = root / "benchmark_data" / "地方政府债到期收益率_10年_2024至最新.csv"
+    data_path = curve_path(root, DEFAULT_BENCHMARK_ID)
     output_dir = root / "backtest_outputs" / "hold_10y_benchmark"
     yield_curve = load_yield_curve(data_path)
     returns = build_total_return_index(yield_curve, BondReturnConfig())
@@ -27,13 +28,11 @@ def run_hold_10y_benchmark(root: Path) -> dict[str, object]:
 
 
 def run_dashboard_signal_v1(root: Path) -> dict[str, object]:
-    data_path = root / "benchmark_data" / "地方政府债到期收益率_10年_2024至最新.csv"
     output_dir = root / "backtest_outputs" / "dashboard_signal_v1"
-    yield_curve = load_yield_curve(data_path)
-    benchmark = build_total_return_index(yield_curve, BondReturnConfig())
+    market = load_market_data(root, DEFAULT_BENCHMARK_ID)
     signals = build_dashboard_signal(root)
 
-    daily, strategy_metrics, benchmark_metrics = _backtest_dashboard_signals(benchmark, signals)
+    daily, strategy_metrics, benchmark_metrics = _backtest_dashboard_signals(market, signals)
     write_strategy_outputs(daily, signals, strategy_metrics, benchmark_metrics, output_dir)
     return strategy_metrics
 
@@ -43,12 +42,10 @@ def run_dashboard_config(
     config: DashboardStrategyConfig,
     output_dir: Path | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, object], dict[str, object]]:
-    data_path = root / "benchmark_data" / "地方政府债到期收益率_10年_2024至最新.csv"
-    yield_curve = load_yield_curve(data_path)
-    benchmark = build_total_return_index(yield_curve, BondReturnConfig())
-    benchmark = _apply_configured_backtest_window(benchmark, config)
+    market = load_market_data(root, config.benchmark_id)
+    market = _apply_configured_backtest_window(market, config)
     signals = build_dashboard_signal(root, config.weights, config.thresholds, config.positions)
-    daily, strategy_metrics, benchmark_metrics = _backtest_dashboard_signals(benchmark, signals)
+    daily, strategy_metrics, benchmark_metrics = _backtest_dashboard_signals(market, signals)
     if output_dir is not None:
         write_strategy_outputs(daily, signals, strategy_metrics, benchmark_metrics, output_dir)
     return daily, signals, strategy_metrics, benchmark_metrics
@@ -73,10 +70,10 @@ def _apply_configured_backtest_window(
 
 
 def _backtest_dashboard_signals(
-    benchmark: pd.DataFrame,
+    market: pd.DataFrame,
     signals: pd.DataFrame,
 ) -> tuple[pd.DataFrame, dict[str, object], dict[str, object]]:
-    daily = benchmark.copy()
+    daily = market.copy()
     signal_for_merge = signals[["signal_date", "总分", "结论", "仓位"]].copy()
     daily = pd.merge_asof(
         daily.sort_values("date"),
@@ -86,10 +83,10 @@ def _backtest_dashboard_signals(
         direction="backward",
     )
     daily = daily.dropna(subset=["signal_date"]).reset_index(drop=True)
-    daily["strategy_return"] = pd.to_numeric(daily["仓位"] * daily["total_return"], errors="coerce")
+    daily["strategy_return"] = pd.to_numeric(daily["仓位"] * daily["asset_total_return"], errors="coerce")
     daily["total_return"] = pd.to_numeric(daily["total_return"], errors="coerce")
-    daily["strategy_carry_return"] = pd.to_numeric(daily["仓位"] * daily["carry_return"], errors="coerce")
-    daily["strategy_capital_return"] = pd.to_numeric(daily["仓位"] * daily["duration_pnl"], errors="coerce")
+    daily["strategy_carry_return"] = pd.to_numeric(daily["仓位"] * daily["asset_carry_return"], errors="coerce")
+    daily["strategy_capital_return"] = pd.to_numeric(daily["仓位"] * daily["asset_duration_pnl"], errors="coerce")
     daily["benchmark_carry_return"] = pd.to_numeric(daily["carry_return"], errors="coerce")
     daily["benchmark_capital_return"] = pd.to_numeric(daily["duration_pnl"], errors="coerce")
     daily["carry_excess_return"] = daily["strategy_carry_return"] - daily["benchmark_carry_return"]
@@ -116,6 +113,9 @@ def _backtest_dashboard_signals(
     benchmark_metrics.update(_signal_period_metrics(daily, "total_return"))
     strategy_metrics.update(capital_gain_trade_metrics(daily, "strategy_capital_return", position_col="仓位"))
     benchmark_metrics.update(capital_gain_trade_metrics(daily, "benchmark_capital_return", position_col=None))
+    strategy_metrics["asset_name"] = str(market.attrs.get("asset_name", "10Y地方政府债"))
+    benchmark_metrics["benchmark_id"] = str(market.attrs.get("benchmark_id", DEFAULT_BENCHMARK_ID))
+    benchmark_metrics["benchmark_name"] = str(market.attrs.get("benchmark_name", "10Y地方政府债"))
     return daily, strategy_metrics, benchmark_metrics
 
 
@@ -146,17 +146,16 @@ def run_dashboard_weight_search_v1(
     objective_config: ObjectiveConfig | None = None,
     base_config: DashboardStrategyConfig | None = None,
 ) -> dict[str, object]:
-    data_path = root / "benchmark_data" / "地方政府债到期收益率_10年_2024至最新.csv"
     output_dir = root / "backtest_outputs" / "dashboard_weight_search_v1"
     output_dir.mkdir(parents=True, exist_ok=True)
-    yield_curve = load_yield_curve(data_path)
-    benchmark = build_total_return_index(yield_curve, BondReturnConfig())
+    benchmark_id = base_config.benchmark_id if base_config is not None else DEFAULT_BENCHMARK_ID
+    market = load_market_data(root, benchmark_id)
     candidates = generate_weight_candidates()
     objective = objective_config or ObjectiveConfig()
     search_thresholds = base_config.thresholds if base_config is not None else DEFAULT_THRESHOLDS
     search_positions = base_config.positions if base_config is not None else DEFAULT_POSITION_POLICY
     results, best_weights = _run_weight_search_fast(
-        root, benchmark, candidates, search_thresholds, search_positions, objective
+        root, market, candidates, search_thresholds, search_positions, objective
     )
 
     results = results.sort_values(
@@ -176,13 +175,14 @@ def run_dashboard_weight_search_v1(
     if best_weights is None:
         raise RuntimeError("weight search produced no candidates")
     best_signals = build_dashboard_signal(root, best_weights, search_thresholds, search_positions)
-    best_daily, best_strategy_metrics, best_benchmark_metrics = _backtest_dashboard_signals(benchmark, best_signals)
+    best_daily, best_strategy_metrics, best_benchmark_metrics = _backtest_dashboard_signals(market, best_signals)
     best_config = DashboardStrategyConfig(
         name=_weight_search_strategy_name(best_weights),
         weights=best_weights,
         thresholds=search_thresholds,
         positions=search_positions,
         objective=objective,
+        benchmark_id=benchmark_id,
     )
     save_strategy_config(best_config, root / "configs" / "experiments" / f"{best_config.name}.json")
     write_strategy_outputs(
@@ -222,7 +222,7 @@ def _weight_search_strategy_name(weights: DashboardWeights) -> str:
 
 def _run_weight_search_fast(
     root: Path,
-    benchmark: pd.DataFrame,
+    market: pd.DataFrame,
     candidates: list[DashboardWeights],
     thresholds: DashboardThresholds = DEFAULT_THRESHOLDS,
     position_policy = DEFAULT_POSITION_POLICY,
@@ -232,7 +232,7 @@ def _run_weight_search_fast(
     multipliers = build_dashboard_factor_multipliers(root, thresholds)
     signal_for_merge = multipliers[["signal_date"]].copy()
     daily = pd.merge_asof(
-        benchmark.sort_values("date"),
+        market.sort_values("date"),
         signal_for_merge.sort_values("signal_date").reset_index(names="signal_index"),
         left_on="date",
         right_on="signal_date",
@@ -240,10 +240,12 @@ def _run_weight_search_fast(
     )
     daily = daily.dropna(subset=["signal_date"]).reset_index(drop=True)
     signal_index = daily["signal_index"].astype(int).to_numpy()
-    daily_returns = pd.to_numeric(daily["total_return"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
-    daily_capital_returns = pd.to_numeric(daily["duration_pnl"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+    daily_returns = pd.to_numeric(daily["asset_total_return"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+    daily_capital_returns = pd.to_numeric(daily["asset_duration_pnl"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+    benchmark_daily_returns = pd.to_numeric(daily["total_return"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+    benchmark_daily_capital_returns = pd.to_numeric(daily["duration_pnl"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
     benchmark_metrics = performance_metrics(
-        daily.assign(benchmark_nav_rebased=(1.0 + daily_returns).cumprod()),
+        daily.assign(benchmark_nav_rebased=(1.0 + benchmark_daily_returns).cumprod()),
         return_col="total_return",
         nav_col="benchmark_nav_rebased",
     )
@@ -284,7 +286,7 @@ def _run_weight_search_fast(
         max_drawdown = np.min(nav / running_max - 1.0, axis=1)
         excess_total_return = total_return - benchmark_total_return
         capital_gain_bp = capital_returns.sum(axis=1) * 10000.0
-        benchmark_capital_gain_bp = float(daily_capital_returns.sum() * 10000.0)
+        benchmark_capital_gain_bp = float(benchmark_daily_capital_returns.sum() * 10000.0)
         capital_gain_excess_bp = capital_gain_bp - benchmark_capital_gain_bp
         capital_cumulative_bp = np.cumsum(capital_returns * 10000.0, axis=1)
         capital_running_max_bp = np.maximum.accumulate(capital_cumulative_bp, axis=1)

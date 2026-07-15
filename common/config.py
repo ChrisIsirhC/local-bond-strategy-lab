@@ -7,6 +7,7 @@ from typing import Any
 
 from strategies.dashboard_signal_v1 import DashboardThresholds, DashboardWeights
 from strategies.position_policy import DashboardPositionPolicy
+from common.market_data import DEFAULT_BENCHMARK_ID, normalize_benchmark_id
 
 
 CONFIG_DIR = Path("configs")
@@ -37,6 +38,7 @@ class DashboardStrategyConfig:
     objective: ObjectiveConfig
     backtest_start: str | None = None
     backtest_end: str | None = None
+    benchmark_id: str = DEFAULT_BENCHMARK_ID
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -49,6 +51,7 @@ class DashboardStrategyConfig:
                 "start_date": self.backtest_start,
                 "end_date": self.backtest_end,
             },
+            "benchmark": self.benchmark_id,
         }
 
 
@@ -72,6 +75,7 @@ def strategy_config_from_dict(raw: dict[str, Any]) -> DashboardStrategyConfig:
         objective=ObjectiveConfig(**_float_dict(raw.get("objective", {}))),
         backtest_start=backtest.get("start_date"),
         backtest_end=backtest.get("end_date"),
+        benchmark_id=normalize_benchmark_id(raw.get("benchmark")),
     )
 
 

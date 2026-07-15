@@ -9,12 +9,12 @@ from typing import Any
 import pandas as pd
 
 from common.config import DashboardStrategyConfig, load_strategy_config, save_strategy_config
+from common.market_data import TRADED_ASSET_ID, benchmark_label, curve_path
 from common.reporting import write_strategy_outputs
 from common.trade_metrics import capital_gain_trade_metrics
 
 
 EXPERIMENT_DIR = Path("backtest_outputs") / "experiments"
-BENCHMARK_FILE = Path("benchmark_data") / "地方政府债到期收益率_10年_2024至最新.csv"
 SIGNAL_FILE = Path("data_processed") / "图表指标_周度宽表_统一日期.csv"
 
 
@@ -35,12 +35,16 @@ def archive_dashboard_experiment(
     write_strategy_outputs(daily, signals, strategy_metrics, benchmark_metrics, output_dir)
     save_strategy_config(config, output_dir / "config.json")
 
-    benchmark_path = root / BENCHMARK_FILE
+    asset_path = curve_path(root, TRADED_ASSET_ID)
+    benchmark_path = curve_path(root, config.benchmark_id)
     signal_path = root / SIGNAL_FILE
     manifest = {
         "run_id": output_dir.name,
         "策略名称": config.name,
         "策略版本": "dashboard_signal_v1",
+        "交易标的": benchmark_label(TRADED_ASSET_ID),
+        "比较基准": benchmark_label(config.benchmark_id),
+        "基准ID": config.benchmark_id,
         "运行来源": source,
         "运行时间": run_time.isoformat(timespec="seconds"),
         "回测起始日期": strategy_metrics.get("start_date"),
@@ -60,6 +64,7 @@ def archive_dashboard_experiment(
         "资本利得最大回撤_BP": strategy_metrics.get("capital_gain_max_drawdown_bp"),
         "基准资本利得最大回撤_BP": benchmark_metrics.get("capital_gain_max_drawdown_bp"),
         "输入数据": {
+            "交易标的收益率曲线": _file_fingerprint(asset_path),
             "基准收益率曲线": _file_fingerprint(benchmark_path),
             "周度看板信号": _file_fingerprint(signal_path),
         },
@@ -102,6 +107,7 @@ def list_experiments(root: Path) -> pd.DataFrame:
                 "运行时间": manifest.get("运行时间", ""),
                 "策略名称": manifest.get("策略名称", ""),
                 "运行来源": manifest.get("运行来源", ""),
+                "比较基准": manifest.get("比较基准", "10Y地方政府债"),
                 "回测起始日期": manifest.get("回测起始日期", ""),
                 "回测结束日期": manifest.get("回测结束日期", ""),
                 "回测区间": f"{manifest.get('回测起始日期', '')} 至 {manifest.get('回测结束日期', '')}",

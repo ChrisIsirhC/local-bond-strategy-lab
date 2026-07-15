@@ -169,6 +169,8 @@ def _write_strategy_nav(daily: pd.DataFrame, path: Path) -> None:
             "总分": daily["总分"],
             "结论": daily["结论"],
             "仓位": daily["仓位"],
+            "交易标的到期收益率_百分比": daily.get("asset_yield_pct", pd.Series(index=daily.index, dtype=float)),
+            "比较基准到期收益率_百分比": daily.get("yield_pct", pd.Series(index=daily.index, dtype=float)),
             "策略日收益率": daily["strategy_return"],
             "基准日收益率": daily["total_return"],
             "策略票息Carry收益": daily.get("strategy_carry_return", pd.Series(index=daily.index, dtype=float)),
@@ -366,13 +368,13 @@ def _capital_trade_metric_table(strategy_metrics: dict[str, object], benchmark_m
     return "\n".join(rows)
 
 
-def _attribution_table(daily: pd.DataFrame) -> str:
+def _attribution_table(daily: pd.DataFrame, benchmark_name: str = "10Y地方政府债") -> str:
     last = daily.iloc[-1]
     rows = [
         ("策略票息 carry", last.get("strategy_carry_cum", 0.0), "策略仓位 × 基准 carry，低仓位会少吃票息，负仓位会反向承担 carry。"),
         ("策略资本利得", last.get("strategy_capital_cum", 0.0), "策略仓位 × 久期资本利得，体现利率下行/上行时仓位择时的收益。"),
-        ("基准票息 carry", last.get("benchmark_carry_cum", 0.0), "100% 长期持有 10Y 地方债久期敞口的 carry。"),
-        ("基准资本利得", last.get("benchmark_capital_cum", 0.0), "100% 长期持有时由收益率变化带来的久期损益。"),
+        ("基准票息 carry", last.get("benchmark_carry_cum", 0.0), f"100% 长期持有 {benchmark_name} 久期敞口的 carry。"),
+        ("基准资本利得", last.get("benchmark_capital_cum", 0.0), f"100% 长期持有 {benchmark_name} 时由收益率变化带来的久期损益。"),
         ("票息 carry 超额", last.get("carry_excess_cum", 0.0), "策略相对满仓持有少吃或多吃的 carry。"),
         ("资本利得超额", last.get("capital_excess_cum", 0.0), "策略相对满仓持有通过择时获得或损失的资本利得。"),
     ]
@@ -513,6 +515,7 @@ def _write_strategy_html_report(
     neutral_position = policy.get("neutral_position", 0.5)
     bearish_position = policy.get("bearish_position", -1.0)
     weights_rows = _weights_rows(signals.attrs.get("weights", {}))
+    benchmark_name = str(benchmark_metrics.get("benchmark_name", "10Y地方政府债"))
     html = f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -551,6 +554,7 @@ def _write_strategy_html_report(
     <li>策略目标：以交易盘视角检验地方债看板对10Y地方债资本利得的择时能力。</li>
     <li>交易定义：仓位从0变为非0时开仓，回到0时平仓；多空反向视为先平旧仓再开新仓，同方向加减仓不拆分交易。</li>
     <li>交易标的：用 <code>地方政府债到期收益率:10年</code> 构造的 10Y 地方债合成总收益。</li>
+    <li>比较基准：100%长期持有 {html_lib.escape(benchmark_name)} 的合成总收益。</li>
     <li>仓位规则：总分 ≥ {bullish_threshold:g} 看多，仓位 {bullish_position:g}；{bearish_threshold:g} 至 {bullish_threshold:g} 中性，仓位 {neutral_position:g}；低于 {bearish_threshold:g} 看空，仓位 {bearish_position:g}。</li>
     <li>当前版本定位：规则版 v1，重点是可解释和可调整，不做参数优化。</li>
   </ul>
@@ -572,7 +576,7 @@ def _write_strategy_html_report(
   <p>本项目以资本利得为主，carry仅作为辅助解释。传统总收益仍保留，便于与长期持有基准和底仓型账户比较。</p>
   <table>
     <thead><tr><th>项目</th><th>区间累计贡献</th><th>解释</th></tr></thead>
-    <tbody>{_attribution_table(daily)}</tbody>
+    <tbody>{_attribution_table(daily, benchmark_name)}</tbody>
   </table>
 
   <h2>逐笔交易诊断</h2>
