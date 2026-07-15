@@ -30,7 +30,8 @@ METRIC_LABELS = {
     "winning_signal_periods": "盈利调仓周期数",
     "signal_period_win_rate": "调仓周期胜率",
     "avg_signal_period_return": "单周期平均收益",
-    "capital_gain_total_bp": "累计资本利得_BP",
+    "capital_gain_total_bp": "累计资本利得_BP（收益率变动）",
+    "capital_gain_annualized_bp": "年化资本利得_BP",
     "capital_gain_trade_count": "资本利得交易笔数",
     "capital_gain_closed_trade_count": "已平仓交易笔数",
     "capital_gain_winning_trades": "资本利得盈利笔数",
@@ -45,6 +46,8 @@ METRIC_LABELS = {
     "capital_gain_best_trade_bp": "最佳交易_BP",
     "capital_gain_worst_trade_bp": "最差交易_BP",
     "capital_gain_max_drawdown_bp": "资本利得最大回撤_BP",
+    "capital_gain_max_drawdown_start": "资本利得最大回撤起点",
+    "capital_gain_max_drawdown_end": "资本利得最大回撤终点",
     "capital_gain_longest_losing_streak": "最长连续亏损笔数",
     "capital_gain_open_trade_count": "当前未平仓交易数",
     "capital_gain_open_trade_bp": "当前未平仓资本利得_BP",
@@ -243,8 +246,8 @@ def _build_period_diagnostics(daily: pd.DataFrame, signals: pd.DataFrame) -> pd.
         strategy_return = (1.0 + pd.to_numeric(group["strategy_return"], errors="coerce").fillna(0.0)).prod() - 1.0
         benchmark_return = (1.0 + pd.to_numeric(group["total_return"], errors="coerce").fillna(0.0)).prod() - 1.0
         excess_return = strategy_return - benchmark_return
-        strategy_capital_bp = pd.to_numeric(group["strategy_capital_return"], errors="coerce").fillna(0.0).sum() * 10000.0
-        benchmark_capital_bp = pd.to_numeric(group["benchmark_capital_return"], errors="coerce").fillna(0.0).sum() * 10000.0
+        strategy_capital_bp = pd.to_numeric(group["strategy_capital_bp"], errors="coerce").fillna(0.0).sum()
+        benchmark_capital_bp = pd.to_numeric(group["benchmark_capital_bp"], errors="coerce").fillna(0.0).sum()
         capital_excess_bp = strategy_capital_bp - benchmark_capital_bp
         position = float(group["仓位"].iloc[0])
         signal_row = signal_lookup.loc[signal_date]
@@ -372,9 +375,9 @@ def _attribution_table(daily: pd.DataFrame, benchmark_name: str = "10Y地方政�
     last = daily.iloc[-1]
     rows = [
         ("策略票息 carry", last.get("strategy_carry_cum", 0.0), "策略仓位 × 基准 carry，低仓位会少吃票息，负仓位会反向承担 carry。"),
-        ("策略资本利得", last.get("strategy_capital_cum", 0.0), "策略仓位 × 久期资本利得，体现利率下行/上行时仓位择时的收益。"),
+        ("策略久期折算价格收益", last.get("strategy_capital_cum", 0.0), "传统净值辅助口径：策略仓位 × (-修正久期 × 收益率变化)。"),
         ("基准票息 carry", last.get("benchmark_carry_cum", 0.0), f"100% 长期持有 {benchmark_name} 久期敞口的 carry。"),
-        ("基准资本利得", last.get("benchmark_capital_cum", 0.0), f"100% 长期持有 {benchmark_name} 时由收益率变化带来的久期损益。"),
+        ("基准久期折算价格收益", last.get("benchmark_capital_cum", 0.0), f"传统净值辅助口径：100%长期持有 {benchmark_name} 的久期折算价格收益。"),
         ("票息 carry 超额", last.get("carry_excess_cum", 0.0), "策略相对满仓持有少吃或多吃的 carry。"),
         ("资本利得超额", last.get("capital_excess_cum", 0.0), "策略相对满仓持有通过择时获得或损失的资本利得。"),
     ]
@@ -544,7 +547,7 @@ def _write_strategy_html_report(
 
   <div class="grid">
     <div class="card"><div class="label">区间</div><div class="value">{strategy_metrics['start_date']} 至 {strategy_metrics['end_date']}</div></div>
-    <div class="card"><div class="label">累计资本利得</div><div class="value">{strategy_metrics['capital_gain_total_bp']:.2f} BP</div></div>
+    <div class="card"><div class="label">累计资本利得（收益率变动）</div><div class="value">{strategy_metrics['capital_gain_total_bp']:.2f} BP</div></div>
     <div class="card"><div class="label">已平仓交易胜率</div><div class="value">{_format_metric(strategy_metrics['capital_gain_trade_win_rate'], True) or '暂无已平仓'}</div></div>
     <div class="card"><div class="label">平均单笔 / 最差交易</div><div class="value">{_format_metric(strategy_metrics['capital_gain_avg_trade_bp']) or '-'} / {_format_metric(strategy_metrics['capital_gain_worst_trade_bp']) or '-'} BP</div></div>
   </div>
@@ -560,7 +563,7 @@ def _write_strategy_html_report(
   </ul>
 
   <h2>资本利得交易绩效</h2>
-  <p>资本利得BP按每日 <code>仓位 × (-修正久期 × 收益率变化) × 10,000</code> 累加。这里的BP是资本利得价格收益的基点数，不是收益率曲线变动BP。胜率只统计已平仓交易；样本末仍持有的交易计入累计和浮动资本利得，但不进入胜率。</p>
+  <p>资本利得BP按每日 <code>-仓位 × YTM变化_BP</code> 累加，不乘久期。多头遇到收益率下行、空头遇到收益率上行时记为正值。胜率只统计已平仓交易；样本末仍持有的交易计入累计和浮动资本利得，但不进入胜率。</p>
   <table><thead><tr><th>指标</th><th>策略</th><th>基准</th></tr></thead><tbody>{_capital_trade_metric_table(strategy_metrics, benchmark_metrics)}</tbody></table>
 
   <h2>交互图表</h2>
@@ -598,7 +601,7 @@ def _write_strategy_html_report(
   </table>
 
   <h2>收益口径说明</h2>
-  <p>当前回测不是具体个券的票息/净价/全价回测，而是 10Y 地方债收益率曲线敞口回测。由于没有使用具体债券票面利率，carry 使用上一期 YTM / 252 近似；资本利得使用 -修正久期 × 收益率变化近似。</p>
+  <p>当前回测不是具体个券的票息/净价/全价回测，而是 10Y 地方债收益率曲线方向回测。资本利得BP直接使用 <code>-仓位 × YTM变化_BP</code>；传统净值为了保留价格收益参考，仍使用 carry 与 -修正久期 × 收益率变化近似。</p>
   <p>这个口径适合检验“看板是否能择时 10Y 地方债久期敞口”，但不能等同于某一只地方债的真实持有收益。后续如果接入地方债指数净值、真实久期或个券全价数据，可以替换当前收益合成模块。</p>
 </body>
 </html>
@@ -633,11 +636,11 @@ def _strategy_charts_html(daily: pd.DataFrame) -> str:
     capital_bp_line = (
         Line(init_opts=opts.InitOpts(width="100%", height="500px"))
         .add_xaxis(dates)
-        .add_yaxis("策略累计资本利得", strategy_capital_cum_bp, is_symbol_show=False, color="#bb654f")
-        .add_yaxis("基准累计资本利得", benchmark_capital_cum_bp, is_symbol_show=False, color="#176b5b")
+        .add_yaxis("策略累计资本利得（收益率变动）", strategy_capital_cum_bp, is_symbol_show=False, color="#bb654f")
+        .add_yaxis("基准累计资本利得（收益率变动）", benchmark_capital_cum_bp, is_symbol_show=False, color="#176b5b")
         .add_yaxis("资本利得超额", capital_excess_cum_bp, is_symbol_show=False, color="#9a7b38", linestyle_opts=opts.LineStyleOpts(type_="dashed"))
         .set_global_opts(
-            title_opts=opts.TitleOpts(title="资本利得交易曲线（BP）"),
+            title_opts=opts.TitleOpts(title="收益率资本利得交易曲线（BP，不乘久期）"),
             tooltip_opts=opts.TooltipOpts(trigger="axis"),
             legend_opts=opts.LegendOpts(pos_top="6%"),
             datazoom_opts=[opts.DataZoomOpts(type_="inside"), opts.DataZoomOpts(type_="slider", pos_bottom="2%")],

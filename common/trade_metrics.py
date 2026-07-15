@@ -82,15 +82,16 @@ def vectorized_capital_trade_metrics(
 
 def capital_gain_trade_metrics(
     daily: pd.DataFrame,
-    capital_return_col: str,
+    capital_bp_col: str,
     signal_col: str = "signal_date",
     position_col: str | None = "仓位",
 ) -> dict[str, object]:
-    capital_bp = pd.to_numeric(daily[capital_return_col], errors="coerce").fillna(0.0) * 10000.0
+    frame = daily.sort_values("date").reset_index(drop=True)
+    capital_bp = pd.to_numeric(frame[capital_bp_col], errors="coerce").fillna(0.0)
     trades = capital_gain_trade_table(
-        daily,
-        strategy_col=capital_return_col,
-        benchmark_col=capital_return_col,
+        frame,
+        strategy_col=capital_bp_col,
+        benchmark_col=capital_bp_col,
         position_col=position_col,
     )
     closed = trades.loc[trades["is_closed"]].copy()
@@ -99,6 +100,22 @@ def capital_gain_trade_metrics(
     losing = trade_bp[trade_bp < 0]
     cumulative = capital_bp.cumsum()
     drawdown = cumulative - cumulative.cummax()
+    periods = max(len(frame) - 1, 1)
+    annualized_bp = float(capital_bp.sum() * 252.0 / periods)
+    drawdown_end_index = int(drawdown.idxmin()) if len(drawdown) else None
+    drawdown_start_index = (
+        int(cumulative.loc[:drawdown_end_index].idxmax()) if drawdown_end_index is not None else None
+    )
+    drawdown_start = (
+        pd.Timestamp(frame.loc[drawdown_start_index, "date"]).date().isoformat()
+        if drawdown_start_index is not None
+        else None
+    )
+    drawdown_end = (
+        pd.Timestamp(frame.loc[drawdown_end_index, "date"]).date().isoformat()
+        if drawdown_end_index is not None
+        else None
+    )
 
     average_win = float(winning.mean()) if not winning.empty else None
     average_loss = float(losing.mean()) if not losing.empty else None
@@ -109,6 +126,7 @@ def capital_gain_trade_metrics(
     )
     return {
         "capital_gain_total_bp": float(capital_bp.sum()),
+        "capital_gain_annualized_bp": annualized_bp,
         "capital_gain_trade_count": int(len(trades)),
         "capital_gain_closed_trade_count": int(len(trade_bp)),
         "capital_gain_winning_trades": int(len(winning)),
@@ -123,6 +141,8 @@ def capital_gain_trade_metrics(
         "capital_gain_best_trade_bp": float(trade_bp.max()) if len(trade_bp) else None,
         "capital_gain_worst_trade_bp": float(trade_bp.min()) if len(trade_bp) else None,
         "capital_gain_max_drawdown_bp": float(drawdown.min()) if len(drawdown) else None,
+        "capital_gain_max_drawdown_start": drawdown_start,
+        "capital_gain_max_drawdown_end": drawdown_end,
         "capital_gain_longest_losing_streak": _longest_streak(trade_bp < 0),
         "capital_gain_open_trade_count": int((~trades["is_closed"]).sum()) if not trades.empty else 0,
         "capital_gain_open_trade_bp": float(trades.loc[~trades["is_closed"], "strategy_capital_bp"].sum()) if not trades.empty else 0.0,
@@ -131,8 +151,8 @@ def capital_gain_trade_metrics(
 
 def capital_gain_trade_table(
     daily: pd.DataFrame,
-    strategy_col: str = "strategy_capital_return",
-    benchmark_col: str = "benchmark_capital_return",
+    strategy_col: str = "strategy_capital_bp",
+    benchmark_col: str = "benchmark_capital_bp",
     signal_col: str = "signal_date",
     position_col: str | None = "仓位",
 ) -> pd.DataFrame:
@@ -155,8 +175,8 @@ def capital_gain_trade_table(
         next_position = float(position.iloc[end_index + 1]) if end_index + 1 < len(position) else None
         trade_direction = int(direction.iloc[start_index])
         is_closed = next_position is not None and (next_position == 0 or (1 if next_position > 0 else -1) != trade_direction)
-        strategy_bp = float(pd.to_numeric(group[strategy_col], errors="coerce").fillna(0.0).sum() * 10000.0)
-        benchmark_bp = float(pd.to_numeric(group[benchmark_col], errors="coerce").fillna(0.0).sum() * 10000.0)
+        strategy_bp = float(pd.to_numeric(group[strategy_col], errors="coerce").fillna(0.0).sum())
+        benchmark_bp = float(pd.to_numeric(group[benchmark_col], errors="coerce").fillna(0.0).sum())
         rows.append(
             {
                 "trade_id": int(identifier),

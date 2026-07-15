@@ -83,6 +83,12 @@ def _backtest_dashboard_signals(
         direction="backward",
     )
     daily = daily.dropna(subset=["signal_date"]).reset_index(drop=True)
+    anchor_columns = [
+        "asset_yield_change_bp", "yield_change_bp",
+        "asset_carry_return", "asset_duration_pnl", "asset_total_return",
+        "carry_return", "duration_pnl", "total_return",
+    ]
+    daily.loc[daily.index[0], anchor_columns] = 0.0
     daily["strategy_return"] = pd.to_numeric(daily["仓位"] * daily["asset_total_return"], errors="coerce")
     daily["total_return"] = pd.to_numeric(daily["total_return"], errors="coerce")
     daily["strategy_carry_return"] = pd.to_numeric(daily["仓位"] * daily["asset_carry_return"], errors="coerce")
@@ -97,8 +103,8 @@ def _backtest_dashboard_signals(
     daily["benchmark_capital_cum"] = daily["benchmark_capital_return"].fillna(0.0).cumsum()
     daily["carry_excess_cum"] = daily["carry_excess_return"].fillna(0.0).cumsum()
     daily["capital_excess_cum"] = daily["capital_excess_return"].fillna(0.0).cumsum()
-    daily["strategy_capital_bp"] = daily["strategy_capital_return"] * 10000.0
-    daily["benchmark_capital_bp"] = daily["benchmark_capital_return"] * 10000.0
+    daily["strategy_capital_bp"] = -daily["仓位"] * daily["asset_yield_change_bp"]
+    daily["benchmark_capital_bp"] = -daily["yield_change_bp"]
     daily["capital_excess_bp"] = daily["strategy_capital_bp"] - daily["benchmark_capital_bp"]
     daily["strategy_capital_cum_bp"] = daily["strategy_capital_bp"].fillna(0.0).cumsum()
     daily["benchmark_capital_cum_bp"] = daily["benchmark_capital_bp"].fillna(0.0).cumsum()
@@ -111,8 +117,9 @@ def _backtest_dashboard_signals(
     benchmark_metrics = performance_metrics(daily, return_col="total_return", nav_col="benchmark_nav_rebased")
     strategy_metrics.update(_signal_period_metrics(daily, "strategy_return"))
     benchmark_metrics.update(_signal_period_metrics(daily, "total_return"))
-    strategy_metrics.update(capital_gain_trade_metrics(daily, "strategy_capital_return", position_col="仓位"))
-    benchmark_metrics.update(capital_gain_trade_metrics(daily, "benchmark_capital_return", position_col=None))
+    strategy_metrics.update(capital_gain_trade_metrics(daily, "strategy_capital_bp", position_col="仓位"))
+    benchmark_metrics.update(capital_gain_trade_metrics(daily, "benchmark_capital_bp", position_col=None))
+    strategy_metrics["capital_gain_bp_definition"] = "收益率方向变动BP（不乘久期）"
     strategy_metrics["asset_name"] = str(market.attrs.get("asset_name", "10Y地方政府债"))
     benchmark_metrics["benchmark_id"] = str(market.attrs.get("benchmark_id", DEFAULT_BENCHMARK_ID))
     benchmark_metrics["benchmark_name"] = str(market.attrs.get("benchmark_name", "10Y地方政府债"))
@@ -244,8 +251,12 @@ def _run_weight_search_fast(
     daily_capital_returns = pd.to_numeric(daily["asset_duration_pnl"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
     benchmark_daily_returns = pd.to_numeric(daily["total_return"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
     benchmark_daily_capital_returns = pd.to_numeric(daily["duration_pnl"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+    asset_capital_bp = -pd.to_numeric(daily["asset_yield_change_bp"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+    benchmark_capital_bp_daily = -pd.to_numeric(daily["yield_change_bp"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+    for values in [daily_returns, daily_capital_returns, benchmark_daily_returns, benchmark_daily_capital_returns, asset_capital_bp, benchmark_capital_bp_daily]:
+        values[0] = 0.0
     benchmark_metrics = performance_metrics(
-        daily.assign(benchmark_nav_rebased=(1.0 + benchmark_daily_returns).cumprod()),
+        daily.assign(total_return=benchmark_daily_returns, benchmark_nav_rebased=(1.0 + benchmark_daily_returns).cumprod()),
         return_col="total_return",
         nav_col="benchmark_nav_rebased",
     )
@@ -270,6 +281,7 @@ def _run_weight_search_fast(
         positions = weekly_positions[:, signal_index]
         returns = positions * daily_returns
         capital_returns = positions * daily_capital_returns
+        capital_bp = positions * asset_capital_bp
         nav = np.cumprod(1.0 + returns, axis=1)
         total_return = nav[:, -1] / nav[:, 0] - 1.0
         final_nav = nav[:, -1]
@@ -285,17 +297,17 @@ def _run_weight_search_fast(
         running_max = np.maximum.accumulate(nav, axis=1)
         max_drawdown = np.min(nav / running_max - 1.0, axis=1)
         excess_total_return = total_return - benchmark_total_return
-        capital_gain_bp = capital_returns.sum(axis=1) * 10000.0
-        benchmark_capital_gain_bp = float(benchmark_daily_capital_returns.sum() * 10000.0)
+        capital_gain_bp = capital_bp.sum(axis=1)
+        benchmark_capital_gain_bp = float(benchmark_capital_bp_daily.sum())
         capital_gain_excess_bp = capital_gain_bp - benchmark_capital_gain_bp
-        capital_cumulative_bp = np.cumsum(capital_returns * 10000.0, axis=1)
+        capital_cumulative_bp = np.cumsum(capital_bp, axis=1)
         capital_running_max_bp = np.maximum.accumulate(capital_cumulative_bp, axis=1)
         capital_gain_max_drawdown_bp = np.min(capital_cumulative_bp - capital_running_max_bp, axis=1)
         capital_period_returns = []
         signal_period_returns = []
         for signal_id in np.unique(signal_index):
             period_mask = signal_index == signal_id
-            capital_period_returns.append(capital_returns[:, period_mask].sum(axis=1) * 10000.0)
+            capital_period_returns.append(capital_bp[:, period_mask].sum(axis=1))
             signal_period_returns.append(np.prod(1.0 + returns[:, period_mask], axis=1) - 1.0)
         capital_trade_bp = np.column_stack(capital_period_returns)
         signal_period_returns_array = np.column_stack(signal_period_returns)
@@ -511,7 +523,7 @@ def _write_search_summary(
 body{{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHei",sans-serif}}main{{max-width:1280px;margin:auto;padding:48px 28px 80px}}h1{{font-size:38px;margin:0 0 14px}}h2{{margin-top:52px}}h3{{margin:28px 0 12px}}.lead{{color:#66716c;max-width:980px;line-height:1.8}}.metrics{{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid #cfd5d1;border-bottom:1px solid #cfd5d1;margin:30px 0}}.metric{{padding:22px 18px;border-right:1px solid #cfd5d1}}.metric:last-child{{border:0}}.metric b{{display:block;font-size:25px;color:#bb654f;margin-top:8px}}.steps{{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#d9ddd8;border:1px solid #d9ddd8}}.step{{background:#fbfaf6;padding:18px;line-height:1.65}}.step b{{display:block;color:#176b5b;margin-bottom:8px}}.chart{{background:#fbfaf6;margin:18px 0;padding:12px;border-radius:4px}}.callout{{border-left:4px solid #bb654f;background:#fbfaf6;padding:18px 22px;line-height:1.8}}table{{border-collapse:collapse;width:100%;font-size:12px;background:#fbfaf6}}th,td{{padding:8px;border-bottom:1px solid #d9ddd8;text-align:left;white-space:nowrap}}th{{background:#e8ece8;color:#176b5b;position:sticky;top:0}}.table-wrap{{overflow-x:auto;overflow-y:visible;border:1px solid #d9ddd8}}code{{color:#176b5b}}@media(max-width:800px){{.metrics,.steps{{grid-template-columns:1fr 1fr}}}}
 </style></head><body><main>
 <h1>10Y地方债策略：因子权重搜索</h1>
-<p class="lead">本报告汇总权重搜索的完整设计和结果。搜索只改变九个因子的赋分权重，定性阈值和仓位制度保持固定；全部候选使用NumPy矩阵分块计算，并以资本利得BP和逐笔胜率为主评价。</p>
+<p class="lead">本报告汇总权重搜索的完整设计和结果。搜索只改变九个因子的赋分权重，定性阈值和仓位制度保持固定；全部候选使用NumPy矩阵分块计算。资本利得BP按 -仓位 × YTM变化BP 计算，不乘久期。</p>
 <div class="metrics"><div class="metric">候选组合<b>{len(results):,}</b></div><div class="metric">累计资本利得<b>{best['capital_gain_total_bp']:.2f} BP</b></div><div class="metric">资本利得超额<b>{best['capital_gain_excess_bp']:.2f} BP</b></div><div class="metric">逐笔胜率<b>{best['capital_trade_win_rate']:.2%}</b></div></div>
 <h2>搜索设计</h2><div class="steps"><div class="step"><b>权重步长</b>所有权重以5分为最小单位。</div><div class="step"><b>模块约束</b>供给20至40、银行10至25、估值25至45、非银5至25。</div><div class="step"><b>总分约束</b>正向权重合计固定100；发飞惩罚搜索0至-30。</div><div class="step"><b>排序目标</b>{formula}</div></div>
 <h3>固定定性阈值</h3><div class="table-wrap">{threshold_table.to_html(index=False, escape=False)}</div>

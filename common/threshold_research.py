@@ -391,11 +391,16 @@ def _evaluate_candidates(
     )
     daily_positions = weekly_positions[:, signal_index]
     daily_returns = pd.to_numeric(daily["asset_total_return"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
-    returns = daily_positions * daily_returns[None, :]
     daily_capital_returns = pd.to_numeric(daily["asset_duration_pnl"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
-    capital_returns = daily_positions * daily_capital_returns[None, :]
     benchmark_daily_returns = pd.to_numeric(daily["total_return"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
     benchmark_daily_capital_returns = pd.to_numeric(daily["duration_pnl"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+    asset_capital_bp = -pd.to_numeric(daily["asset_yield_change_bp"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+    benchmark_capital_bp_daily = -pd.to_numeric(daily["yield_change_bp"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+    for values in [daily_returns, daily_capital_returns, benchmark_daily_returns, benchmark_daily_capital_returns, asset_capital_bp, benchmark_capital_bp_daily]:
+        values[0] = 0.0
+    returns = daily_positions * daily_returns[None, :]
+    capital_returns = daily_positions * daily_capital_returns[None, :]
+    capital_bp = daily_positions * asset_capital_bp[None, :]
     nav = np.cumprod(1.0 + returns, axis=1)
     benchmark_nav = np.cumprod(1.0 + benchmark_daily_returns)
     periods = max(len(daily_returns) - 1, 1)
@@ -415,14 +420,14 @@ def _evaluate_candidates(
     signal_win_rate = (period_returns > 0).mean(axis=1)
     capital_trade_columns = []
     for signal_id in np.unique(signal_index):
-        capital_trade_columns.append(capital_returns[:, signal_index == signal_id].sum(axis=1) * 10000.0)
+        capital_trade_columns.append(capital_bp[:, signal_index == signal_id].sum(axis=1))
     capital_trade_bp = np.column_stack(capital_trade_columns)
-    capital_gain_bp = capital_returns.sum(axis=1) * 10000.0
-    benchmark_capital_gain_bp = float(benchmark_daily_capital_returns.sum() * 10000.0)
+    capital_gain_bp = capital_bp.sum(axis=1)
+    benchmark_capital_gain_bp = float(benchmark_capital_bp_daily.sum())
     capital_gain_excess_bp = capital_gain_bp - benchmark_capital_gain_bp
     trade_stats = vectorized_capital_trade_metrics(executed_weekly_positions, capital_trade_bp)
     capital_trade_win_rate = np.nan_to_num(trade_stats["trade_win_rate"], nan=0.0)
-    capital_cumulative_bp = np.cumsum(capital_returns * 10000.0, axis=1)
+    capital_cumulative_bp = np.cumsum(capital_bp, axis=1)
     capital_gain_max_drawdown_bp = np.min(
         capital_cumulative_bp - np.maximum.accumulate(capital_cumulative_bp, axis=1), axis=1
     )
@@ -740,7 +745,7 @@ def _write_html_report(
 body{{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHei",sans-serif}}main{{max-width:1280px;margin:auto;padding:48px 28px 80px}}h1{{font-size:38px;margin:0 0 14px}}h2{{margin-top:52px}}h3{{margin:28px 0 12px}}.lead{{color:#66716c;max-width:980px;line-height:1.8}}.metrics{{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid #cfd5d1;border-bottom:1px solid #cfd5d1;margin:30px 0}}.metric{{padding:22px 18px;border-right:1px solid #cfd5d1}}.metric:last-child{{border:0}}.metric b{{display:block;font-size:25px;color:#bb654f;margin-top:8px}}.chart{{background:#fbfaf6;margin:18px 0;padding:12px;border-radius:4px}}.steps{{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#d9ddd8;border:1px solid #d9ddd8}}.step{{background:#fbfaf6;padding:18px;line-height:1.65}}.step b{{display:block;color:#176b5b;margin-bottom:8px}}.callout{{border-left:4px solid #bb654f;background:#fbfaf6;padding:18px 22px;line-height:1.8}}table{{border-collapse:collapse;width:100%;font-size:12px;background:#fbfaf6}}th,td{{padding:8px;border-bottom:1px solid #d9ddd8;text-align:left;white-space:nowrap}}th{{background:#e8ece8;color:#176b5b;position:sticky;top:0}}.table-wrap{{overflow-x:auto;overflow-y:visible;border:1px solid #d9ddd8}}code{{color:#176b5b}}@media(max-width:800px){{.metrics,.steps{{grid-template-columns:1fr 1fr}}}}
 </style></head><body><main>
 <h1>10Y地方债策略：阈值调参实验</h1>
-<p class="lead">本报告是本次阈值研究的唯一说明文件。实验使用网页所选基线的九因子权重和多/中/空仓位，只检验定性分界、看空总分门槛和看空确认条件，并以资本利得BP和逐笔胜率为主评价。</p>
+<p class="lead">本报告是本次阈值研究的唯一说明文件。实验使用网页所选基线的九因子权重和多/中/空仓位，只检验定性分界、看空总分门槛和看空确认条件。资本利得BP按 -仓位 × YTM变化BP 计算，不乘久期。</p>
 <div class="metrics"><div class="metric">候选组合<b>{len(results)}</b></div><div class="metric">累计资本利得<b>{best['capital_gain_total_bp']:.2f} BP</b></div><div class="metric">资本利得超额<b>{best['capital_gain_excess_bp']:.2f} BP</b></div><div class="metric">逐笔胜率<b>{best['capital_trade_win_rate']:.2%}</b></div></div>
 <h2>实验设计</h2>
 <div class="steps"><div class="step"><b>1. 单模块敏感性</b>分位阈值测试15/85至35/65，利差变化按0.5BP生成候选。</div><div class="step"><b>2. 看空总分</b>测试15至40；多/中/空仓位沿用所选基线。</div><div class="step"><b>3. 确认规则</b>测试模块数量、供需确认和连续两周确认。</div><div class="step"><b>4. 有限交叉</b>只对最敏感的两个模块组合，避免全参数暴力过拟合。</div></div>

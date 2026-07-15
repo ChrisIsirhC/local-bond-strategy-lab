@@ -303,9 +303,12 @@ def _inject_styles() -> None:
         .metric-grid { display: grid; grid-template-columns: repeat(12, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 0 2.3rem; animation: rise .55s .12s ease both; }
         .metric-cell { grid-column: span 3; padding: 1.35rem 1.2rem 1.5rem 0; min-width: 0; }
         .metric-cell + .metric-cell { border-left: 1px solid var(--line); padding-left: 1.2rem; }
+        .metric-cell:nth-child(4n + 1) { border-left: 0; padding-left: 0; }
+        .metric-cell:nth-child(n + 5) { border-top: 1px solid var(--line); }
         .metric-label { color: var(--muted); font-size: .78rem; margin-bottom: .65rem; }
         .metric-value { font-family: "IBM Plex Mono", monospace; font-size: clamp(1.55rem, 2.3vw, 2.35rem); line-height: 1; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
         .metric-detail { color: var(--muted); font-size: .76rem; margin-top: .65rem; }
+        .metric-cell.compact-value .metric-value { font-size: clamp(1rem, 1.45vw, 1.45rem); line-height: 1.25; white-space: normal; }
         .positive { color: var(--coral); }
         .negative { color: var(--green); }
 
@@ -389,7 +392,7 @@ def _inject_styles() -> None:
         .qualitative.bullish { color: #934634; border-color: var(--coral); background: #f2e5e1; }
         .qualitative.bearish { color: #11594c; border-color: var(--green); background: #e2eee9; }
 
-        .featured-carousel { position: relative; min-height: 15.8rem; margin-bottom: 2.4rem; overflow: hidden; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+        .featured-carousel { position: relative; min-height: 24rem; margin-bottom: 2.4rem; overflow: hidden; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
         .featured-slide { position: absolute; inset: 0; display: grid; grid-template-rows: auto 1fr; opacity: 0; pointer-events: none; animation: featuredCycle 12s infinite; }
         .featured-carousel.single .featured-slide { display: none; animation: none; }
         .featured-carousel.single .featured-slide:first-child { display: grid; opacity: 1; pointer-events: auto; }
@@ -402,9 +405,12 @@ def _inject_styles() -> None:
         .featured-metrics { display: grid; grid-template-columns: repeat(4, 1fr); }
         .featured-metric { padding: 1.2rem 1.1rem 1.3rem 0; min-width: 0; }
         .featured-metric + .featured-metric { border-left: 1px solid var(--line); padding-left: 1.1rem; }
+        .featured-metric:nth-child(4n + 1) { border-left: 0; padding-left: 0; }
+        .featured-metric:nth-child(n + 5) { border-top: 1px solid var(--line); }
         .featured-metric.highlight { background: rgba(187,101,79,.075); box-shadow: inset 0 3px 0 var(--coral); padding-left: 1.1rem; }
         .featured-metric-label { color: var(--muted); font-size: .76rem; margin-bottom: .65rem; }
         .featured-metric-value { color: var(--ink); font-family: "IBM Plex Mono", monospace; font-size: clamp(1.35rem, 2vw, 2.05rem); font-weight: 600; white-space: nowrap; }
+        .featured-metric.compact-value .featured-metric-value { font-size: clamp(.95rem, 1.35vw, 1.3rem); line-height: 1.25; white-space: normal; }
         .featured-metric.highlight .featured-metric-value { color: var(--coral); }
         .featured-metric-benchmark { color: var(--muted); font-size: .72rem; margin-top: .65rem; }
 
@@ -421,12 +427,13 @@ def _inject_styles() -> None:
             .hero-title { font-size: 2.55rem; }
             .hero-aside { border-left: 0; border-top: 1px solid var(--line); padding: 1.3rem 0 0; }
             .metric-cell { grid-column: span 6; }
-            .metric-cell:nth-child(3) { border-left: 0; padding-left: 0; }
+            .metric-cell:nth-child(odd) { border-left: 0; padding-left: 0; }
+            .metric-cell:nth-child(n + 3) { border-top: 1px solid var(--line); }
             .logic-flow { grid-template-columns: 1fr; }
-            .featured-carousel { min-height: 25rem; }
+            .featured-carousel { min-height: 42rem; }
             .featured-metrics { grid-template-columns: 1fr 1fr; }
-            .featured-metric:nth-child(3) { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
-            .featured-metric:nth-child(4) { border-top: 1px solid var(--line); }
+            .featured-metric:nth-child(odd) { border-left: 0; padding-left: 0; }
+            .featured-metric:nth-child(n + 3) { border-top: 1px solid var(--line); }
             .history-quick-grid { grid-template-columns: 1fr; }
         }
         @media (max-width: 560px) {
@@ -437,7 +444,7 @@ def _inject_styles() -> None:
             .hero-title { font-size: 2.55rem; }
             .metric-cell { grid-column: span 12; border-left: 0 !important; padding-left: 0 !important; border-bottom: 1px solid var(--line); }
             .metric-cell:last-child { border-bottom: 0; }
-            .featured-carousel { min-height: 42rem; }
+            .featured-carousel { min-height: 72rem; }
             .featured-slide-header { align-items: flex-start; flex-direction: column; }
             .featured-metrics { grid-template-columns: 1fr; }
             .featured-metric { border-left: 0 !important; border-top: 1px solid var(--line); padding-left: 0 !important; }
@@ -593,8 +600,8 @@ def _sidebar_config(
         objective_values = base.objective.as_dict()
         objective_display = pd.DataFrame(
             [
-                {"项目": "累计资本利得BP", "权重": objective_values["capital_gain_bp_weight"]},
-                {"项目": "资本利得超额BP", "权重": objective_values["capital_gain_excess_bp_weight"]},
+                {"项目": "累计收益率资本利得BP", "权重": objective_values["capital_gain_bp_weight"]},
+                {"项目": "收益率资本利得超额BP", "权重": objective_values["capital_gain_excess_bp_weight"]},
                 {"项目": "已平仓交易胜率", "权重": objective_values["capital_trade_win_rate_weight"]},
                 {"项目": "资本利得回撤BP", "权重": objective_values["capital_gain_drawdown_bp_penalty"]},
                 {"项目": "累计收益", "权重": objective_values["total_return_weight"]},
@@ -765,7 +772,7 @@ def _render_launch_state(config: DashboardStrategyConfig) -> None:
             <div>
                 <p class="eyebrow">10Y 地方债方向与仓位研究</p>
                 <h1 class="hero-title">把看板判断，转成可复现的持仓路径。</h1>
-                <p class="hero-copy">以周度看板信号决定交易仓位，主要评价10Y地方债久期交易产生的资本利得BP、逐笔胜率和亏损控制；carry与传统收益率作为辅助。</p>
+                <p class="hero-copy">以周度看板信号决定交易仓位，主要评价策略捕获的10Y地方债收益率方向变动BP、逐笔胜率和亏损控制；久期折算价格收益、carry与传统净值作为辅助。</p>
             </div>
             <aside class="hero-aside">
                 <div class="aside-label">当前中性仓位</div>
@@ -809,10 +816,19 @@ def _render_summary(strategy_metrics: dict[str, object], benchmark_metrics: dict
     latest = signals.iloc[-1]
     capital_bp = float(strategy_metrics["capital_gain_total_bp"])
     benchmark_capital_bp = float(benchmark_metrics["capital_gain_total_bp"])
+    capital_excess_bp = capital_bp - benchmark_capital_bp
     benchmark_name = str(benchmark_metrics.get("benchmark_name", "10Y地方政府债"))
     capital_win_rate = strategy_metrics.get("capital_gain_trade_win_rate")
     average_trade_bp = strategy_metrics.get("capital_gain_avg_trade_bp")
     capital_drawdown_bp = strategy_metrics.get("capital_gain_max_drawdown_bp")
+    annualized_capital_bp = strategy_metrics.get("capital_gain_annualized_bp")
+    benchmark_annualized_capital_bp = benchmark_metrics.get("capital_gain_annualized_bp")
+    average_loss_bp = strategy_metrics.get("capital_gain_avg_loss_bp")
+    worst_trade_bp = strategy_metrics.get("capital_gain_worst_trade_bp")
+    drawdown_start = strategy_metrics.get("capital_gain_max_drawdown_start")
+    drawdown_end = strategy_metrics.get("capital_gain_max_drawdown_end")
+    benchmark_drawdown_start = benchmark_metrics.get("capital_gain_max_drawdown_start")
+    benchmark_drawdown_end = benchmark_metrics.get("capital_gain_max_drawdown_end")
     win_rate_text = "暂无已平仓" if capital_win_rate is None else _pct(capital_win_rate)
     average_trade_text = "暂无已平仓" if average_trade_bp is None else f"{float(average_trade_bp):.2f} BP"
     capital_drawdown_text = "暂无" if capital_drawdown_bp is None else f"{float(capital_drawdown_bp):.2f} BP"
@@ -825,7 +841,7 @@ def _render_summary(strategy_metrics: dict[str, object], benchmark_metrics: dict
             <div>
                 <p class="eyebrow">回测结果 / {escape(signal_date)}</p>
                 <h1 class="hero-title">当前结论：{escape(str(latest.get('结论', '未识别')))}</h1>
-                <p class="hero-copy">总分 {float(latest.get('总分', 0)):.1f}，目标仓位 {float(latest['仓位']):.1f}。本项目以资本利得BP和逐笔交易胜率为主评价口径。</p>
+                <p class="hero-copy">总分 {float(latest.get('总分', 0)):.1f}，目标仓位 {float(latest['仓位']):.1f}。资本利得BP按 -仓位 × YTM变化BP 计算，不乘久期。</p>
             </div>
             <aside class="hero-aside">
                 <div class="aside-label">最新仓位</div>
@@ -834,19 +850,37 @@ def _render_summary(strategy_metrics: dict[str, object], benchmark_metrics: dict
             </aside>
         </section>
         <section class="metric-grid">
-            {_metric_cell('累计资本利得', f'{capital_bp:.2f} BP', f'{benchmark_name} {benchmark_capital_bp:.2f} BP', capital_bp)}
+            {_metric_cell('累计资本利得（收益率变动）', f'{capital_bp:.2f} BP', f'{benchmark_name}累计 {benchmark_capital_bp:.2f} BP', capital_bp)}
             {_metric_cell('已平仓交易胜率', win_rate_text, f"盈利 {strategy_metrics['capital_gain_winning_trades']:.0f} / 已平仓 {strategy_metrics['capital_gain_closed_trade_count']:.0f} 笔", 0.0 if capital_win_rate is None else float(capital_win_rate) - 0.5)}
             {_metric_cell('平均单笔资本利得', average_trade_text, '盈亏比暂无' if payoff is None else f"盈亏比 {float(payoff):.2f}", 0.0 if average_trade_bp is None else float(average_trade_bp))}
             {_metric_cell('资本利得最大回撤', capital_drawdown_text, f"{benchmark_name} {float(benchmark_metrics.get('capital_gain_max_drawdown_bp', 0.0)):.2f} BP", 0.0 if capital_drawdown_bp is None else float(capital_drawdown_bp))}
+            {_metric_cell('超额资本利得', f'{capital_excess_bp:.2f} BP', _relative_excess_detail(benchmark_name, capital_excess_bp, benchmark_capital_bp), capital_excess_bp)}
+            {_metric_cell('年化资本利得', '暂无' if annualized_capital_bp is None else f'{float(annualized_capital_bp):.2f} BP', f"{benchmark_name} 暂无" if benchmark_annualized_capital_bp is None else f'{benchmark_name} {float(benchmark_annualized_capital_bp):.2f} BP', 0.0 if annualized_capital_bp is None else float(annualized_capital_bp))}
+            {_metric_cell('平均单笔亏损', '暂无亏损' if average_loss_bp is None else f'{float(average_loss_bp):.2f} BP', '区间内无亏损交易' if average_loss_bp is None else ('最大亏损暂无' if worst_trade_bp is None or float(worst_trade_bp) >= 0 else f'最大亏损 {float(worst_trade_bp):.2f} BP'), 0.0 if average_loss_bp is None else float(average_loss_bp))}
+            {_metric_cell('最大回撤时间', '暂无' if not drawdown_start or not drawdown_end else f'{drawdown_start} 至 {drawdown_end}', _drawdown_duration_text(drawdown_start, drawdown_end), 0.0 if capital_drawdown_bp is None else float(capital_drawdown_bp), compact=True)}
         </section>
         """,
         unsafe_allow_html=True,
     )
 
 
-def _metric_cell(label: str, value: str, detail: str, direction: float) -> str:
+def _metric_cell(label: str, value: str, detail: str, direction: float, compact: bool = False) -> str:
     color_class = "positive" if direction > 0 else "negative" if direction < 0 else ""
-    return f"<div class='metric-cell'><div class='metric-label'>{escape(label)}</div><div class='metric-value {color_class}'>{escape(value)}</div><div class='metric-detail'>{escape(detail)}</div></div>"
+    compact_class = " compact-value" if compact else ""
+    return f"<div class='metric-cell{compact_class}'><div class='metric-label'>{escape(label)}</div><div class='metric-value {color_class}'>{escape(value)}</div><div class='metric-detail'>{escape(detail)}</div></div>"
+
+
+def _drawdown_duration_text(start: object, end: object) -> str:
+    if not start or not end:
+        return "暂无持续时间"
+    days = max((pd.Timestamp(end) - pd.Timestamp(start)).days, 0)
+    return f"持续 {days} 天 / {days / 7.0:.1f} 周"
+
+
+def _relative_excess_detail(benchmark_name: str, excess_bp: object, benchmark_bp: object) -> str:
+    if excess_bp is None or benchmark_bp is None or pd.isna(excess_bp) or pd.isna(benchmark_bp) or abs(float(benchmark_bp)) < 1e-12:
+        return f"较{benchmark_name}提升暂无"
+    return f"较{benchmark_name} {float(excess_bp) / abs(float(benchmark_bp)):+.2%}"
 
 
 def _render_workspace(
@@ -885,7 +919,7 @@ def _render_trading_tab(
     benchmark_metrics: dict[str, object],
 ) -> None:
     st.markdown("#### 资本利得交易曲线")
-    st.caption("交易从非零仓位开始，归零或反向时结束；同方向加减仓仍属于同一笔。BP仅统计久期资本利得，不包含carry。")
+    st.caption("交易从非零仓位开始，归零或反向时结束；同方向加减仓仍属于同一笔。BP按 -仓位 × YTM变化BP 统计，不乘久期、不包含carry。")
     _render_interactive_chart(_capital_bp_chart(daily), key="capital_gain_bp")
     st.markdown("#### 逐笔资本利得")
     _render_interactive_chart(_capital_trade_chart(daily), key="capital_gain_trades")
@@ -1056,15 +1090,29 @@ def _render_home_research_snapshot() -> None:
     slides = []
     for index, (advantage, highlight_keys, row) in enumerate(_pick_featured_experiments(valid)):
         experiment_id = quote(Path(str(row["实验目录"])).name)
+        benchmark_name = str(row.get("比较基准") or "满仓基准")
+        capital_bp = pd.to_numeric(pd.Series([row.get("累计资本利得_BP")]), errors="coerce").iloc[0]
+        benchmark_capital_bp = pd.to_numeric(pd.Series([row.get("基准累计资本利得_BP")]), errors="coerce").iloc[0]
+        excess_bp = pd.to_numeric(pd.Series([row.get("资本利得超额_BP")]), errors="coerce").iloc[0]
+        annualized_bp = pd.to_numeric(pd.Series([row.get("年化资本利得_BP")]), errors="coerce").iloc[0]
+        benchmark_annualized_bp = pd.to_numeric(pd.Series([row.get("基准年化资本利得_BP")]), errors="coerce").iloc[0]
+        avg_loss_bp = pd.to_numeric(pd.Series([row.get("平均单笔亏损_BP")]), errors="coerce").iloc[0]
+        worst_bp = pd.to_numeric(pd.Series([row.get("最差交易_BP")]), errors="coerce").iloc[0]
+        drawdown_start = row.get("资本利得最大回撤起点")
+        drawdown_end = row.get("资本利得最大回撤终点")
         metrics = [
-            ("capital", "累计资本利得", row.get("累计资本利得_BP"), row.get("基准累计资本利得_BP"), "bp"),
-            ("win", "已平仓交易胜率", row.get("资本利得交易胜率"), None, "pct"),
-            ("average", "平均单笔资本利得", row.get("平均单笔资本利得_BP"), None, "bp"),
-            ("capital_drawdown", "资本利得最大回撤", row.get("资本利得最大回撤_BP"), row.get("基准资本利得最大回撤_BP"), "bp"),
+            ("capital", "累计资本利得", _bp_text(capital_bp), _bp_detail(benchmark_name, "累计", benchmark_capital_bp), False),
+            ("win", "已平仓交易胜率", _pct(row.get("资本利得交易胜率")), f"盈利 {int(row.get('盈利交易数') or 0)} / 已平仓 {int(row.get('已平仓交易数') or 0)} 笔", False),
+            ("average", "平均单笔资本利得", _bp_text(row.get("平均单笔资本利得_BP")), "盈亏比暂无" if pd.isna(row.get("资本利得盈亏比")) else f"盈亏比 {float(row.get('资本利得盈亏比')):.2f}", False),
+            ("capital_drawdown", "资本利得最大回撤", _bp_text(row.get("资本利得最大回撤_BP")), _bp_detail(benchmark_name, "", row.get("基准资本利得最大回撤_BP")), False),
+            ("excess", "超额资本利得", _bp_text(excess_bp), _relative_excess_detail(benchmark_name, excess_bp, benchmark_capital_bp), False),
+            ("annual", "年化资本利得", _bp_text(annualized_bp), _bp_detail(benchmark_name, "", benchmark_annualized_bp), False),
+            ("loss", "平均单笔亏损", "暂无亏损" if pd.isna(avg_loss_bp) else _bp_text(avg_loss_bp), "区间内无亏损交易" if pd.isna(avg_loss_bp) else ("最大亏损暂无" if pd.isna(worst_bp) or float(worst_bp) >= 0 else f"最大亏损 {float(worst_bp):.2f} BP"), False),
+            ("drawdown_time", "最大回撤时间", "暂无" if not drawdown_start or not drawdown_end else f"{drawdown_start} 至 {drawdown_end}", _drawdown_duration_text(drawdown_start, drawdown_end), True),
         ]
         metric_html = "".join(
-            _featured_metric_html(label, value, benchmark, unit, key in highlight_keys)
-            for key, label, value, benchmark, unit in metrics
+            _featured_metric_html(label, value_text, detail, key in highlight_keys, compact)
+            for key, label, value_text, detail, compact in metrics
         )
         slides.append(
             f'<article class="featured-slide" style="animation-delay:-{index * 4}s">'
@@ -1119,29 +1167,22 @@ def _pick_featured_experiments(frame: pd.DataFrame) -> list[tuple[str, set[str],
     return [(" · ".join(advantages), highlights, row) for advantages, highlights, row in selected[:3]]
 
 
-def _featured_metric_html(label: str, value: object, benchmark: object, unit: str, highlighted: bool) -> str:
-    if value is None or pd.isna(value):
-        value_text = "暂无"
-    elif unit == "pct":
-        value_text = _pct(value)
-    else:
-        value_text = f"{float(value):.2f} BP"
-    if label == "已平仓交易胜率":
-        benchmark_text = "基准持续持有，无已平仓胜率"
-    elif label == "平均单笔资本利得":
-        benchmark_text = "基准持续持有，无已平仓平均单笔"
-    elif benchmark is None or pd.isna(benchmark):
-        benchmark_text = "基准暂无可比数据"
-    elif unit == "pct":
-        benchmark_text = f"满仓基准 {_pct(benchmark)}"
-    else:
-        benchmark_text = f"满仓基准 {float(benchmark):.2f} BP"
+def _featured_metric_html(label: str, value_text: str, detail: str, highlighted: bool, compact: bool = False) -> str:
     highlight_class = " highlight" if highlighted else ""
+    compact_class = " compact-value" if compact else ""
     return (
-        f'<div class="featured-metric{highlight_class}"><div class="featured-metric-label">{escape(label)}</div>'
+        f'<div class="featured-metric{highlight_class}{compact_class}"><div class="featured-metric-label">{escape(label)}</div>'
         f'<div class="featured-metric-value">{escape(value_text)}</div>'
-        f'<div class="featured-metric-benchmark">{escape(benchmark_text)}</div></div>'
+        f'<div class="featured-metric-benchmark">{escape(detail)}</div></div>'
     )
+
+
+def _bp_text(value: object) -> str:
+    return "暂无" if value is None or pd.isna(value) else f"{float(value):.2f} BP"
+
+
+def _bp_detail(name: str, prefix: str, value: object) -> str:
+    return f"{name}暂无" if value is None or pd.isna(value) else f"{name}{prefix} {float(value):.2f} BP"
 
 
 def _render_experiment_history(show_report: bool = False) -> None:
@@ -1159,7 +1200,7 @@ def _render_experiment_history(show_report: bool = False) -> None:
     display = display.drop(columns=["实验目录"])
     display = display[
         [
-            "打开结果", "运行时间", "策略名称", "比较基准", "运行来源", "回测区间", "累计资本利得_BP", "资本利得超额_BP",
+            "打开结果", "运行时间", "策略名称", "比较基准", "BP口径", "运行来源", "回测区间", "累计资本利得_BP", "资本利得超额_BP",
             "资本利得交易胜率", "已平仓交易数", "平均单笔资本利得_BP", "资本利得最大回撤_BP",
             "策略累计收益率", "最大回撤", "夏普比率",
         ]
@@ -1422,8 +1463,8 @@ def _search_objective_controls(defaults: ObjectiveConfig | None = None) -> Objec
     st.caption("下列参数只影响两个批量搜索的候选排序，不影响单次回测。正权重奖励指标，惩罚项通常设为正数后乘以负向风险指标。")
     capital_col, risk_col, traditional_col = st.columns(3)
     with capital_col:
-        capital_gain_bp_weight = st.number_input("累计资本利得BP权重", value=float(defaults.capital_gain_bp_weight), step=0.1, key="search_capital_gain_bp_weight")
-        capital_gain_excess_bp_weight = st.number_input("资本利得超额BP权重", value=float(defaults.capital_gain_excess_bp_weight), step=0.05, key="search_capital_gain_excess_bp_weight")
+        capital_gain_bp_weight = st.number_input("累计收益率资本利得BP权重", value=float(defaults.capital_gain_bp_weight), step=0.1, key="search_capital_gain_bp_weight")
+        capital_gain_excess_bp_weight = st.number_input("收益率资本利得超额BP权重", value=float(defaults.capital_gain_excess_bp_weight), step=0.05, key="search_capital_gain_excess_bp_weight")
         capital_trade_win_rate_weight = st.number_input("已平仓交易胜率权重", value=float(defaults.capital_trade_win_rate_weight), step=1.0, key="search_capital_trade_win_rate_weight")
     with risk_col:
         capital_gain_drawdown_bp_penalty = st.number_input("资本利得回撤BP系数", value=float(defaults.capital_gain_drawdown_bp_penalty), step=0.1, key="search_capital_gain_drawdown_bp_penalty", help="回撤指标本身为负数；正系数会形成惩罚。")
@@ -1494,7 +1535,7 @@ def _render_nav_tab(daily: pd.DataFrame, strategy_metrics: dict[str, object], be
 
 def _render_attribution_tab(daily: pd.DataFrame) -> None:
     st.markdown("#### 资本利得与 Carry 辅助归因")
-    st.caption("资本利得是主口径；carry只用于解释传统总收益。资本利得BP是价格收益的基点数，不是收益率曲线变动BP。")
+    st.caption("资本利得BP是策略捕获的收益率方向变动：-仓位 × YTM变化BP，不乘久期。久期折算价格收益与carry只用于解释传统净值。")
     _render_interactive_chart(_attribution_chart(daily), key="return_attribution")
     attribution = daily[
         [
@@ -1509,11 +1550,11 @@ def _render_attribution_tab(daily: pd.DataFrame) -> None:
     ].copy()
     labels = {
         "strategy_carry_cum": "策略累计 Carry",
-        "strategy_capital_cum": "策略累计资本利得",
+        "strategy_capital_cum": "策略累计久期价格收益",
         "benchmark_carry_cum": "基准累计 Carry",
-        "benchmark_capital_cum": "基准累计资本利得",
+        "benchmark_capital_cum": "基准累计久期价格收益",
         "carry_excess_cum": "Carry 超额",
-        "capital_excess_cum": "资本利得超额",
+        "capital_excess_cum": "久期价格收益超额",
     }
     latest = attribution.iloc[-1].drop(labels=["date"]).rename(index=labels).map(_pct).rename("累计贡献").reset_index()
     latest.columns = ["归因项目", "累计贡献"]
@@ -1775,8 +1816,8 @@ def _nav_chart(daily: pd.DataFrame) -> go.Figure:
 def _capital_bp_chart(daily: pd.DataFrame) -> go.Figure:
     figure = make_subplots(specs=[[{"secondary_y": True}]])
     for name, column, color, dash in [
-        ("策略累计资本利得", "strategy_capital_cum_bp", CORAL, None),
-        ("满仓基准累计资本利得", "benchmark_capital_cum_bp", GREEN, None),
+        ("策略累计资本利得（收益率变动）", "strategy_capital_cum_bp", CORAL, None),
+        ("满仓基准累计资本利得（收益率变动）", "benchmark_capital_cum_bp", GREEN, None),
         ("资本利得超额", "capital_excess_cum_bp", GOLD, "dash"),
     ]:
         figure.add_trace(
@@ -1801,9 +1842,9 @@ def _capital_bp_chart(daily: pd.DataFrame) -> go.Figure:
         ),
         secondary_y=True,
     )
-    _apply_chart_theme(figure, "累计资本利得与执行仓位", 500)
+    _apply_chart_theme(figure, "累计收益率资本利得与执行仓位", 500)
     _lock_date_extent(figure, daily["date"])
-    figure.update_yaxes(title_text="累计资本利得（BP）", ticksuffix=" BP", secondary_y=False)
+    figure.update_yaxes(title_text="累计收益率变动（BP）", ticksuffix=" BP", secondary_y=False)
     figure.update_yaxes(title_text="仓位", range=[-1.1, 1.1], showgrid=False, secondary_y=True)
     return figure
 
@@ -1861,11 +1902,11 @@ def _attribution_chart(daily: pd.DataFrame) -> go.Figure:
     figure = go.Figure()
     series = [
         ("策略 Carry", "strategy_carry_cum", GREEN, 2.5, None),
-        ("策略资本利得", "strategy_capital_cum", CORAL, 2.5, None),
+        ("策略久期价格收益", "strategy_capital_cum", CORAL, 2.5, None),
         ("基准 Carry", "benchmark_carry_cum", GREEN_LIGHT, 1.7, None),
-        ("基准资本利得", "benchmark_capital_cum", INK, 1.7, None),
+        ("基准久期价格收益", "benchmark_capital_cum", INK, 1.7, None),
         ("Carry 超额", "carry_excess_cum", GOLD, 1.6, "dash"),
-        ("资本利得超额", "capital_excess_cum", "#7b8180", 1.6, "dash"),
+        ("久期价格收益超额", "capital_excess_cum", "#7b8180", 1.6, "dash"),
     ]
     for name, column, color, width, dash in series:
         line = {"color": color, "width": width}
@@ -1881,7 +1922,7 @@ def _attribution_chart(daily: pd.DataFrame) -> go.Figure:
                 hovertemplate=f"{name} %{{y:.2f}}%<extra></extra>",
             )
         )
-    _apply_chart_theme(figure, "收益归因：Carry 与资本利得累计贡献", 500)
+    _apply_chart_theme(figure, "传统净值归因：Carry 与久期价格收益", 500)
     _lock_date_extent(figure, daily["date"])
     figure.update_yaxes(title_text="累计贡献（%）", ticksuffix="%")
     return figure

@@ -45,6 +45,7 @@ def archive_dashboard_experiment(
         "交易标的": benchmark_label(TRADED_ASSET_ID),
         "比较基准": benchmark_label(config.benchmark_id),
         "基准ID": config.benchmark_id,
+        "资本利得BP口径": "收益率方向变动BP（不乘久期）",
         "运行来源": source,
         "运行时间": run_time.isoformat(timespec="seconds"),
         "回测起始日期": strategy_metrics.get("start_date"),
@@ -108,6 +109,7 @@ def list_experiments(root: Path) -> pd.DataFrame:
                 "策略名称": manifest.get("策略名称", ""),
                 "运行来源": manifest.get("运行来源", ""),
                 "比较基准": manifest.get("比较基准", "10Y地方政府债"),
+                "BP口径": manifest.get("资本利得BP口径", "久期折算价格收益BP（旧口径）"),
                 "回测起始日期": manifest.get("回测起始日期", ""),
                 "回测结束日期": manifest.get("回测结束日期", ""),
                 "回测区间": f"{manifest.get('回测起始日期', '')} 至 {manifest.get('回测结束日期', '')}",
@@ -118,14 +120,23 @@ def list_experiments(root: Path) -> pd.DataFrame:
                 "最大回撤": manifest.get("策略最大回撤"),
                 "基准最大回撤": trade_metrics.get("benchmark_max_drawdown", manifest.get("基准最大回撤")),
                 "累计资本利得_BP": trade_metrics.get("capital_gain_total_bp", manifest.get("策略累计资本利得_BP")),
+                "年化资本利得_BP": trade_metrics.get("capital_gain_annualized_bp"),
                 "基准累计资本利得_BP": trade_metrics.get("benchmark_capital_gain_total_bp", manifest.get("基准累计资本利得_BP")),
                 "资本利得超额_BP": manifest.get("资本利得超额_BP"),
                 "资本利得交易胜率": trade_metrics.get("capital_gain_trade_win_rate", manifest.get("资本利得交易胜率")),
                 "已平仓交易数": trade_metrics.get("capital_gain_closed_trade_count"),
+                "盈利交易数": trade_metrics.get("capital_gain_winning_trades"),
                 "平均单笔资本利得_BP": trade_metrics.get("capital_gain_avg_trade_bp", manifest.get("平均单笔资本利得_BP")),
+                "平均单笔亏损_BP": trade_metrics.get("capital_gain_avg_loss_bp"),
+                "资本利得盈亏比": trade_metrics.get("capital_gain_profit_loss_ratio"),
                 "最差交易_BP": trade_metrics.get("capital_gain_worst_trade_bp", manifest.get("最差交易_BP")),
                 "资本利得最大回撤_BP": trade_metrics.get("capital_gain_max_drawdown_bp", manifest.get("资本利得最大回撤_BP")),
+                "资本利得最大回撤起点": trade_metrics.get("capital_gain_max_drawdown_start"),
+                "资本利得最大回撤终点": trade_metrics.get("capital_gain_max_drawdown_end"),
                 "基准资本利得最大回撤_BP": trade_metrics.get("benchmark_capital_gain_max_drawdown_bp", manifest.get("基准资本利得最大回撤_BP")),
+                "基准年化资本利得_BP": trade_metrics.get("benchmark_capital_gain_annualized_bp"),
+                "基准资本利得最大回撤起点": trade_metrics.get("benchmark_capital_gain_max_drawdown_start"),
+                "基准资本利得最大回撤终点": trade_metrics.get("benchmark_capital_gain_max_drawdown_end"),
                 "实验目录": str(manifest_path.parent),
             }
         )
@@ -173,11 +184,19 @@ def load_experiment_result(
     metrics_frame = pd.read_csv(experiment_dir / "performance_metrics.csv", encoding="utf-8-sig")
     strategy_metrics = _metrics_from_archive(metrics_frame, "策略")
     benchmark_metrics = _metrics_from_archive(metrics_frame, "基准")
+    benchmark_metrics["benchmark_id"] = config.benchmark_id
+    benchmark_metrics["benchmark_name"] = benchmark_label(config.benchmark_id)
     # Always rebuild trade-level metrics from the archived position path. Older
     # archives may contain the former weekly-period trade count even when their
     # daily NAV and position snapshots are otherwise complete.
-    strategy_metrics.update(capital_gain_trade_metrics(daily, "strategy_capital_return", position_col="仓位"))
-    benchmark_metrics.update(capital_gain_trade_metrics(daily, "benchmark_capital_return", position_col=None))
+    strategy_metrics.update(capital_gain_trade_metrics(daily, "strategy_capital_bp", position_col="仓位"))
+    benchmark_metrics.update(capital_gain_trade_metrics(daily, "benchmark_capital_bp", position_col=None))
+    manifest_path = experiment_dir / "run_manifest.json"
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        definition = manifest.get("资本利得BP口径", "久期折算价格收益BP（旧口径）")
+        strategy_metrics["capital_gain_bp_definition"] = definition
+        benchmark_metrics["capital_gain_bp_definition"] = definition
     return daily, signals, strategy_metrics, benchmark_metrics, config
 
 
@@ -192,11 +211,16 @@ def _archived_strategy_trade_metrics(experiment_dir: Path) -> dict[str, object]:
                 "日期": "date",
                 "策略资本利得收益": "strategy_capital_return",
                 "基准资本利得收益": "benchmark_capital_return",
+                "策略资本利得_BP": "strategy_capital_bp",
+                "基准资本利得_BP": "benchmark_capital_bp",
             }
         )
         frame["date"] = pd.to_datetime(frame["date"])
-        strategy_metrics = capital_gain_trade_metrics(frame, "strategy_capital_return", position_col="仓位")
-        benchmark_metrics = capital_gain_trade_metrics(frame, "benchmark_capital_return", position_col=None)
+        if "strategy_capital_bp" not in frame or "benchmark_capital_bp" not in frame:
+            frame["strategy_capital_bp"] = pd.to_numeric(frame["strategy_capital_return"], errors="coerce").fillna(0.0) * 10000.0
+            frame["benchmark_capital_bp"] = pd.to_numeric(frame["benchmark_capital_return"], errors="coerce").fillna(0.0) * 10000.0
+        strategy_metrics = capital_gain_trade_metrics(frame, "strategy_capital_bp", position_col="仓位")
+        benchmark_metrics = capital_gain_trade_metrics(frame, "benchmark_capital_bp", position_col=None)
         benchmark_nav = pd.to_numeric(frame.get("基准净值"), errors="coerce")
         benchmark_max_drawdown = None
         if benchmark_nav is not None and benchmark_nav.notna().any():
@@ -204,7 +228,10 @@ def _archived_strategy_trade_metrics(experiment_dir: Path) -> dict[str, object]:
         return {
             **strategy_metrics,
             "benchmark_capital_gain_total_bp": benchmark_metrics.get("capital_gain_total_bp"),
+            "benchmark_capital_gain_annualized_bp": benchmark_metrics.get("capital_gain_annualized_bp"),
             "benchmark_capital_gain_max_drawdown_bp": benchmark_metrics.get("capital_gain_max_drawdown_bp"),
+            "benchmark_capital_gain_max_drawdown_start": benchmark_metrics.get("capital_gain_max_drawdown_start"),
+            "benchmark_capital_gain_max_drawdown_end": benchmark_metrics.get("capital_gain_max_drawdown_end"),
             "benchmark_max_drawdown": benchmark_max_drawdown,
         }
     except (OSError, KeyError, ValueError):
