@@ -4,6 +4,18 @@ import numpy as np
 import pandas as pd
 
 
+def select_executed_weekly_positions(
+    weekly_positions: np.ndarray,
+    daily_signal_index: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    signal_ids = np.unique(np.asarray(daily_signal_index, dtype=int))
+    if signal_ids.size == 0:
+        return weekly_positions[:, :0], signal_ids
+    if signal_ids[0] < 0 or signal_ids[-1] >= weekly_positions.shape[1]:
+        raise ValueError("日度回测引用了不存在的周度信号")
+    return weekly_positions[:, signal_ids], signal_ids
+
+
 def vectorized_capital_trade_metrics(
     weekly_positions: np.ndarray,
     weekly_capital_bp: np.ndarray,

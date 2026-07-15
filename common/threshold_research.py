@@ -13,7 +13,7 @@ from common.config import DashboardStrategyConfig, ObjectiveConfig, load_strateg
 from common.experiments import archive_dashboard_experiment
 from common.reporting import _build_period_diagnostics, write_strategy_outputs
 from common.runner import run_dashboard_config
-from common.trade_metrics import vectorized_capital_trade_metrics
+from common.trade_metrics import select_executed_weekly_positions, vectorized_capital_trade_metrics
 from strategies.dashboard_signal_v1 import DashboardThresholds, DashboardWeights
 from strategies.position_policy import DashboardPositionPolicy
 
@@ -386,6 +386,9 @@ def _evaluate_candidates(
         bearish[selector] = confirmed
 
     weekly_positions = _candidate_position_matrix(scores, bearish, params)
+    executed_weekly_positions, executed_signal_ids = select_executed_weekly_positions(
+        weekly_positions, signal_index
+    )
     daily_positions = weekly_positions[:, signal_index]
     daily_returns = pd.to_numeric(daily["total_return"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
     returns = daily_positions * daily_returns[None, :]
@@ -415,7 +418,7 @@ def _evaluate_candidates(
     capital_gain_bp = capital_returns.sum(axis=1) * 10000.0
     benchmark_capital_gain_bp = float(daily_capital_returns.sum() * 10000.0)
     capital_gain_excess_bp = capital_gain_bp - benchmark_capital_gain_bp
-    trade_stats = vectorized_capital_trade_metrics(weekly_positions, capital_trade_bp)
+    trade_stats = vectorized_capital_trade_metrics(executed_weekly_positions, capital_trade_bp)
     capital_trade_win_rate = np.nan_to_num(trade_stats["trade_win_rate"], nan=0.0)
     capital_cumulative_bp = np.cumsum(capital_returns * 10000.0, axis=1)
     capital_gain_max_drawdown_bp = np.min(
@@ -456,14 +459,16 @@ def _evaluate_candidates(
     result["capital_gain_open_trade_count"] = trade_stats["open_trade_count"]
     result["capital_gain_open_trade_bp"] = trade_stats["open_trade_bp"]
     result["capital_gain_max_drawdown_bp"] = capital_gain_max_drawdown_bp
-    result["bearish_signal_count"] = bearish.sum(axis=1)
+    result["bearish_signal_count"] = bearish[:, executed_signal_ids].sum(axis=1)
     result["strategy_carry_contribution"] = (daily_positions * carry[None, :]).sum(axis=1)
     result["strategy_capital_contribution"] = (daily_positions * capital[None, :]).sum(axis=1)
-    result["latest_score"] = scores[:, -1]
-    result["latest_position"] = weekly_positions[:, -1]
+    result["latest_score"] = scores[:, executed_signal_ids[-1]]
+    result["latest_position"] = executed_weekly_positions[:, -1]
     if baseline_weekly_positions is None:
-        baseline_weekly_positions = weekly_positions[0].copy()
-    result["changed_signal_count"] = (weekly_positions != baseline_weekly_positions[None, :]).sum(axis=1)
+        baseline_weekly_positions = executed_weekly_positions[0].copy()
+    result["changed_signal_count"] = (
+        executed_weekly_positions != baseline_weekly_positions[None, :]
+    ).sum(axis=1)
     return result, baseline_weekly_positions
 
 

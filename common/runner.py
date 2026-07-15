@@ -10,7 +10,7 @@ from common.config import DashboardStrategyConfig, ObjectiveConfig, save_strateg
 from common.experiments import archive_dashboard_experiment
 from common.performance import performance_metrics
 from common.reporting import write_outputs, write_strategy_outputs
-from common.trade_metrics import capital_gain_trade_metrics, vectorized_capital_trade_metrics
+from common.trade_metrics import capital_gain_trade_metrics, select_executed_weekly_positions, vectorized_capital_trade_metrics
 from strategies.dashboard_signal_v1 import DEFAULT_THRESHOLDS, DashboardThresholds, DashboardWeights, WEIGHT_COLUMNS, build_dashboard_factor_multipliers, build_dashboard_signal
 from strategies.dashboard_weight_search_v1 import generate_weight_candidates
 from strategies.position_policy import DEFAULT_POSITION_POLICY
@@ -262,6 +262,9 @@ def _run_weight_search_fast(
         weights = np.array([[w.as_dict()[col] for col in WEIGHT_COLUMNS] for w in chunk], dtype=float)
         weekly_scores = np.clip(weights @ factor_matrix.T, 0.0, 100.0)
         weekly_positions = policy.vectorized_positions(weekly_scores)
+        executed_weekly_positions, executed_signal_ids = select_executed_weekly_positions(
+            weekly_positions, signal_index
+        )
         positions = weekly_positions[:, signal_index]
         returns = positions * daily_returns
         capital_returns = positions * daily_capital_returns
@@ -295,7 +298,7 @@ def _run_weight_search_fast(
         capital_trade_bp = np.column_stack(capital_period_returns)
         signal_period_returns_array = np.column_stack(signal_period_returns)
         signal_period_win_rate = (signal_period_returns_array > 0.0).mean(axis=1)
-        trade_stats = vectorized_capital_trade_metrics(weekly_positions, capital_trade_bp)
+        trade_stats = vectorized_capital_trade_metrics(executed_weekly_positions, capital_trade_bp)
         capital_trade_win_rate = np.nan_to_num(trade_stats["trade_win_rate"], nan=0.0)
         objective = (
             objective_config.total_return_weight * total_return
@@ -309,8 +312,8 @@ def _run_weight_search_fast(
             + objective_config.capital_gain_drawdown_bp_penalty * capital_gain_max_drawdown_bp
         )
 
-        latest_score = weekly_scores[:, -1]
-        latest_position = weekly_positions[:, -1]
+        latest_score = weekly_scores[:, executed_signal_ids[-1]]
+        latest_position = executed_weekly_positions[:, -1]
         latest_conclusion = policy.vectorized_conclusions(latest_score)
         best_idx = int(np.argmax(objective))
         if float(objective[best_idx]) > best_objective:
