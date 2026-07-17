@@ -15,6 +15,8 @@ class DashboardPositionPolicy:
     bearish_min_core_factors: int = 0
     bearish_require_supply_or_demand: int = 0
     bearish_confirmation_periods: int = 1
+    take_profit_bp: float = 0.0
+    stop_loss_bp: float = 0.0
 
     def conclusion(self, score: float) -> str:
         if score >= self.bullish_threshold:
@@ -99,6 +101,8 @@ class DashboardPositionPolicy:
             "bearish_min_core_factors": self.bearish_min_core_factors,
             "bearish_require_supply_or_demand": self.bearish_require_supply_or_demand,
             "bearish_confirmation_periods": self.bearish_confirmation_periods,
+            "take_profit_bp": self.take_profit_bp,
+            "stop_loss_bp": self.stop_loss_bp,
         }
 
 

@@ -8,7 +8,21 @@ import pandas as pd
 from strategies.position_policy import DEFAULT_POSITION_POLICY, DashboardPositionPolicy
 
 
-SIGNAL_FILE = Path("data_processed") / "图表指标_周度宽表_统一日期.csv"
+FLY_FACTOR_ENABLED = False
+
+
+SIGNAL_FILES = {
+    "weekly": Path("data_processed") / "图表指标_周度宽表_统一日期.csv",
+    "daily": Path("data_processed") / "图表指标_日度宽表_统一日期.csv",
+}
+SIGNAL_FILE = SIGNAL_FILES["weekly"]
+
+
+def signal_file_for_frequency(signal_frequency: str = "weekly") -> Path:
+    frequency = str(signal_frequency).strip().lower()
+    if frequency not in SIGNAL_FILES:
+        raise ValueError(f"不支持的信号频率: {frequency}")
+    return SIGNAL_FILES[frequency]
 
 
 @dataclass(frozen=True)
@@ -16,7 +30,7 @@ class DashboardWeights:
     supply_amount: float = 10.0
     supply_ratio: float = 10.0
     supply_long: float = 10.0
-    fly_penalty: float = -20.0
+    fly_penalty: float = 0.0
     bank_demand: float = 15.0
     spread_gov: float = 15.0
     spread_change: float = 10.0
@@ -164,9 +178,10 @@ def _position(score: float) -> float:
 def build_dashboard_factor_multipliers(
     root: Path,
     thresholds: DashboardThresholds | None = None,
+    signal_frequency: str = "weekly",
 ) -> pd.DataFrame:
     t = thresholds or DEFAULT_THRESHOLDS
-    path = root / SIGNAL_FILE
+    path = root / signal_file_for_frequency(signal_frequency)
     df = pd.read_csv(path, encoding="utf-8-sig")
     df["signal_date"] = pd.to_datetime(df["信号日期"])
 
@@ -187,9 +202,7 @@ def build_dashboard_factor_multipliers(
     out["supply_long"] = [
         _bucket_multiplier(v, t.supply_low, t.supply_high, high_is_bullish=False) for v in supply_long_pct
     ]
-    out["fly_penalty"] = [
-        1.0 if str(v).strip() == "是" else 0.0 for v in df["过去一周是否有地方债“发飞”"]
-    ]
+    out["fly_penalty"] = 0.0
     out["bank_demand"] = [
         _bucket_multiplier(v, t.demand_low, t.demand_high, high_is_bullish=True) for v in bank_pct
     ]
@@ -213,11 +226,12 @@ def build_dashboard_signal(
     weights: DashboardWeights | None = None,
     thresholds: DashboardThresholds | None = None,
     position_policy: DashboardPositionPolicy | None = None,
+    signal_frequency: str = "weekly",
 ) -> pd.DataFrame:
     w = weights or DEFAULT_WEIGHTS
     t = thresholds or DEFAULT_THRESHOLDS
     policy = position_policy or DEFAULT_POSITION_POLICY
-    path = root / SIGNAL_FILE
+    path = root / signal_file_for_frequency(signal_frequency)
     df = pd.read_csv(path, encoding="utf-8-sig")
     df["signal_date"] = pd.to_datetime(df["信号日期"])
 
@@ -242,7 +256,7 @@ def build_dashboard_signal(
         factor_scores["供给_10Y以上发行"], factor_labels["供给_10Y以上发行"] = _bucket_score(
             supply_long_pct.iloc[i], t.supply_low, t.supply_high, w.supply_long, high_is_bullish=False
         )
-        fly_penalty = w.fly_penalty if str(row["过去一周是否有地方债“发飞”"]).strip() == "是" else 0.0
+        fly_penalty = 0.0
         factor_scores["供给_发飞惩罚"] = fly_penalty
         factor_labels["供给_发飞惩罚"] = "利空" if fly_penalty < 0 else "中性"
 
@@ -264,7 +278,6 @@ def build_dashboard_signal(
 
         supply_bearish = (
             sum(factor_labels[name] == "利空" for name in ["供给_发行量", "供给_发行占比", "供给_10Y以上发行"]) >= 2
-            or fly_penalty < 0
         )
         demand_bearish = factor_labels["银行需求"] == "利空"
         valuation_bearish = (
@@ -277,8 +290,8 @@ def build_dashboard_signal(
         score = min(max(raw_score, 0.0), 100.0)
         output = {
             "signal_date": row["signal_date"],
-            "周期起始": row["周期起始"],
-            "周期结束": row["周期结束"],
+            "周期起始": row.get("周期起始", row["信号日期"]),
+            "周期结束": row.get("周期结束", row["信号日期"]),
             "总分_raw": raw_score,
             "总分": score,
             "供给模块_利空": int(supply_bearish),
@@ -302,4 +315,5 @@ def build_dashboard_signal(
     out.attrs["position_policy"] = policy.as_dict()
     out.attrs["weights"] = w.as_dict()
     out.attrs["thresholds"] = t.as_dict()
+    out.attrs["signal_frequency"] = signal_frequency
     return out

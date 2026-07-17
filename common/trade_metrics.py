@@ -4,6 +4,63 @@ import numpy as np
 import pandas as pd
 
 
+def apply_capital_stop_rules(
+    target_positions: np.ndarray,
+    capital_bp_per_unit: np.ndarray,
+    signal_ids: np.ndarray,
+    take_profit_bp: float | np.ndarray = 0.0,
+    stop_loss_bp: float | np.ndarray = 0.0,
+) -> tuple[np.ndarray, np.ndarray]:
+    targets = np.asarray(target_positions, dtype=float)
+    if targets.ndim == 1:
+        targets = targets[None, :]
+    unit_bp = np.asarray(capital_bp_per_unit, dtype=float)
+    if unit_bp.ndim != 1 or unit_bp.shape[0] != targets.shape[1]:
+        raise ValueError("止盈止损的BP序列长度与仓位路径不一致")
+    signals = np.asarray(signal_ids)
+    if signals.ndim != 1 or signals.shape[0] != targets.shape[1]:
+        raise ValueError("止盈止损的信号序列长度与仓位路径不一致")
+
+    candidate_count, period_count = targets.shape
+    take_profit = np.broadcast_to(np.asarray(take_profit_bp, dtype=float).reshape(-1), (candidate_count,))
+    stop_loss = np.broadcast_to(np.asarray(stop_loss_bp, dtype=float).reshape(-1), (candidate_count,))
+    if np.all(take_profit <= 0.0) and np.all(stop_loss <= 0.0):
+        return targets.copy(), np.zeros_like(targets, dtype=np.int8)
+
+    executed = np.zeros_like(targets)
+    stop_events = np.zeros_like(targets, dtype=np.int8)
+    active_direction = np.zeros(candidate_count, dtype=int)
+    trade_pnl = np.zeros(candidate_count, dtype=float)
+    blocked_direction = np.zeros(candidate_count, dtype=int)
+
+    for period in range(period_count):
+        raw_target = targets[:, period]
+        raw_direction = np.sign(raw_target).astype(int)
+        direction_changed_since_stop = (blocked_direction != 0) & (raw_direction != blocked_direction)
+        blocked_direction[direction_changed_since_stop] = 0
+        target = np.where(blocked_direction != 0, 0.0, raw_target)
+        direction = np.sign(target).astype(int)
+        direction_changed = (active_direction != 0) & (direction != active_direction)
+        trade_pnl[direction_changed] = 0.0
+        active_direction[direction_changed] = 0
+        opening = (direction != 0) & (active_direction == 0)
+        active_direction[opening] = direction[opening]
+
+        executed[:, period] = target
+        active = direction != 0
+        trade_pnl[active] += target[active] * unit_bp[period]
+        take_profit_hit = active & (take_profit > 0.0) & (trade_pnl >= take_profit)
+        stop_loss_hit = active & (stop_loss > 0.0) & (trade_pnl <= -stop_loss)
+        triggered = take_profit_hit | stop_loss_hit
+        stop_events[take_profit_hit, period] = 1
+        stop_events[stop_loss_hit, period] = -1
+        blocked_direction[triggered] = direction[triggered]
+        active_direction[triggered] = 0
+        trade_pnl[triggered] = 0.0
+
+    return executed, stop_events
+
+
 def select_executed_weekly_positions(
     weekly_positions: np.ndarray,
     daily_signal_index: np.ndarray,
@@ -12,13 +69,14 @@ def select_executed_weekly_positions(
     if signal_ids.size == 0:
         return weekly_positions[:, :0], signal_ids
     if signal_ids[0] < 0 or signal_ids[-1] >= weekly_positions.shape[1]:
-        raise ValueError("日度回测引用了不存在的周度信号")
+        raise ValueError("日度收益序列引用了不存在的信号周期")
     return weekly_positions[:, signal_ids], signal_ids
 
 
 def vectorized_capital_trade_metrics(
     weekly_positions: np.ndarray,
     weekly_capital_bp: np.ndarray,
+    close_after_period: np.ndarray | None = None,
 ) -> dict[str, np.ndarray]:
     candidate_count = weekly_positions.shape[0]
     current_direction = np.zeros(candidate_count, dtype=int)
@@ -28,8 +86,14 @@ def vectorized_capital_trade_metrics(
     winning_count = np.zeros(candidate_count, dtype=int)
     losing_count = np.zeros(candidate_count, dtype=int)
     closed_pnl_sum = np.zeros(candidate_count, dtype=float)
+    winning_pnl_sum = np.zeros(candidate_count, dtype=float)
     best_trade = np.full(candidate_count, -np.inf)
     worst_trade = np.full(candidate_count, np.inf)
+    forced_closes = (
+        np.asarray(close_after_period, dtype=bool)
+        if close_after_period is not None
+        else np.zeros_like(weekly_positions, dtype=bool)
+    )
 
     for period in range(weekly_positions.shape[1]):
         direction = np.sign(weekly_positions[:, period]).astype(int)
@@ -40,6 +104,7 @@ def vectorized_capital_trade_metrics(
             winning_count[closing] += pnl > 0
             losing_count[closing] += pnl < 0
             closed_pnl_sum[closing] += pnl
+            winning_pnl_sum[closing] += np.where(pnl > 0.0, pnl, 0.0)
             best_trade[closing] = np.maximum(best_trade[closing], pnl)
             worst_trade[closing] = np.minimum(worst_trade[closing], pnl)
             current_pnl[closing] = 0.0
@@ -50,6 +115,18 @@ def vectorized_capital_trade_metrics(
         current_direction[opening] = direction[opening]
         active = direction != 0
         current_pnl[active] += weekly_capital_bp[active, period]
+        forced = forced_closes[:, period] & (current_direction != 0)
+        if forced.any():
+            pnl = current_pnl[forced]
+            closed_count[forced] += 1
+            winning_count[forced] += pnl > 0
+            losing_count[forced] += pnl < 0
+            closed_pnl_sum[forced] += pnl
+            winning_pnl_sum[forced] += np.where(pnl > 0.0, pnl, 0.0)
+            best_trade[forced] = np.maximum(best_trade[forced], pnl)
+            worst_trade[forced] = np.minimum(worst_trade[forced], pnl)
+            current_pnl[forced] = 0.0
+            current_direction[forced] = 0
 
     open_trade = current_direction != 0
     win_rate = np.divide(
@@ -64,6 +141,12 @@ def vectorized_capital_trade_metrics(
         out=np.full(candidate_count, np.nan),
         where=closed_count != 0,
     )
+    average_win = np.divide(
+        winning_pnl_sum,
+        winning_count,
+        out=np.full(candidate_count, np.nan),
+        where=winning_count != 0,
+    )
     best_trade[closed_count == 0] = np.nan
     worst_trade[closed_count == 0] = np.nan
     return {
@@ -73,6 +156,7 @@ def vectorized_capital_trade_metrics(
         "losing_trade_count": losing_count,
         "trade_win_rate": win_rate,
         "average_trade_bp": average_trade,
+        "average_win_bp": average_win,
         "best_trade_bp": best_trade,
         "worst_trade_bp": worst_trade,
         "open_trade_count": open_trade.astype(int),
@@ -119,6 +203,7 @@ def capital_gain_trade_metrics(
 
     average_win = float(winning.mean()) if not winning.empty else None
     average_loss = float(losing.mean()) if not losing.empty else None
+    holding_days = pd.to_numeric(trades["holding_days"], errors="coerce").dropna()
     profit_loss_ratio = (
         average_win / abs(average_loss)
         if average_win is not None and average_loss is not None and average_loss != 0
@@ -140,6 +225,8 @@ def capital_gain_trade_metrics(
         "capital_gain_profit_loss_ratio": profit_loss_ratio,
         "capital_gain_best_trade_bp": float(trade_bp.max()) if len(trade_bp) else None,
         "capital_gain_worst_trade_bp": float(trade_bp.min()) if len(trade_bp) else None,
+        "capital_gain_avg_holding_days": float(holding_days.mean()) if len(holding_days) else None,
+        "capital_gain_max_holding_days": int(holding_days.max()) if len(holding_days) else None,
         "capital_gain_max_drawdown_bp": float(drawdown.min()) if len(drawdown) else None,
         "capital_gain_max_drawdown_start": drawdown_start,
         "capital_gain_max_drawdown_end": drawdown_end,
@@ -155,6 +242,7 @@ def capital_gain_trade_table(
     benchmark_col: str = "benchmark_capital_bp",
     signal_col: str = "signal_date",
     position_col: str | None = "仓位",
+    close_event_col: str | None = "止盈止损事件",
 ) -> pd.DataFrame:
     frame = daily.sort_values("date").reset_index(drop=True).copy()
     position = (
@@ -163,9 +251,18 @@ def capital_gain_trade_table(
         else pd.Series(1.0, index=frame.index)
     )
     active = position.ne(0.0)
+    close_event = (
+        frame[close_event_col].fillna("").astype(str).ne("")
+        if close_event_col is not None and close_event_col in frame.columns
+        else pd.Series(False, index=frame.index)
+    )
     direction = position.apply(lambda value: 1 if value > 0 else -1 if value < 0 else 0)
     previous_direction = direction.shift(1, fill_value=0)
-    starts = active & ((previous_direction == 0) | (direction != previous_direction))
+    starts = active & (
+        (previous_direction == 0)
+        | (direction != previous_direction)
+        | close_event.shift(1, fill_value=False)
+    )
     trade_id = starts.cumsum().where(active)
 
     rows = []
@@ -174,7 +271,10 @@ def capital_gain_trade_table(
         end_index = int(group.index.max())
         next_position = float(position.iloc[end_index + 1]) if end_index + 1 < len(position) else None
         trade_direction = int(direction.iloc[start_index])
-        is_closed = next_position is not None and (next_position == 0 or (1 if next_position > 0 else -1) != trade_direction)
+        is_closed = bool(close_event.iloc[end_index]) or (
+            next_position is not None
+            and (next_position == 0 or (1 if next_position > 0 else -1) != trade_direction)
+        )
         strategy_bp = float(pd.to_numeric(group[strategy_col], errors="coerce").fillna(0.0).sum())
         benchmark_bp = float(pd.to_numeric(group[benchmark_col], errors="coerce").fillna(0.0).sum())
         rows.append(

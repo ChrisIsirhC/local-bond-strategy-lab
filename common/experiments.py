@@ -9,13 +9,13 @@ from typing import Any
 import pandas as pd
 
 from common.config import DashboardStrategyConfig, load_strategy_config, save_strategy_config
-from common.market_data import TRADED_ASSET_ID, benchmark_label, curve_path
+from common.market_data import CONDITIONAL_BENCHMARK_ID, CONDITIONAL_BENCHMARK_NAME, GOV_10Y, TRADED_ASSET_ID, benchmark_label, curve_path
 from common.reporting import write_strategy_outputs
 from common.trade_metrics import capital_gain_trade_metrics
+from strategies.dashboard_signal_v1 import signal_file_for_frequency
 
 
 EXPERIMENT_DIR = Path("backtest_outputs") / "experiments"
-SIGNAL_FILE = Path("data_processed") / "图表指标_周度宽表_统一日期.csv"
 
 
 def archive_dashboard_experiment(
@@ -26,6 +26,7 @@ def archive_dashboard_experiment(
     strategy_metrics: dict[str, object],
     benchmark_metrics: dict[str, object],
     source: str,
+    research_metadata: dict[str, object] | None = None,
 ) -> Path:
     run_time = datetime.now()
     run_id = f"{run_time:%Y%m%d_%H%M%S}__{_safe_name(config.name)}"
@@ -36,17 +37,20 @@ def archive_dashboard_experiment(
     save_strategy_config(config, output_dir / "config.json")
 
     asset_path = curve_path(root, TRADED_ASSET_ID)
-    benchmark_path = curve_path(root, config.benchmark_id)
-    signal_path = root / SIGNAL_FILE
+    benchmark_path = curve_path(root, GOV_10Y)
+    signal_path = root / signal_file_for_frequency(config.signal_frequency)
     manifest = {
         "run_id": output_dir.name,
         "策略名称": config.name,
         "策略版本": "dashboard_signal_v1",
+        "信号频率": "日频" if config.signal_frequency == "daily" else "周频",
         "交易标的": benchmark_label(TRADED_ASSET_ID),
-        "比较基准": benchmark_label(config.benchmark_id),
-        "基准ID": config.benchmark_id,
+        "比较基准": str(benchmark_metrics.get("benchmark_name", CONDITIONAL_BENCHMARK_NAME)),
+        "基准ID": str(benchmark_metrics.get("benchmark_id", CONDITIONAL_BENCHMARK_ID)),
+        "条件基准规则": "仓位>0时同仓位买入10Y国债；仓位<=0时持有现金",
         "资本利得BP口径": "收益率方向变动BP（不乘久期）",
         "运行来源": source,
+        "研究区间": research_metadata or {},
         "运行时间": run_time.isoformat(timespec="seconds"),
         "回测起始日期": strategy_metrics.get("start_date"),
         "回测结束日期": strategy_metrics.get("end_date"),
@@ -61,13 +65,16 @@ def archive_dashboard_experiment(
         "资本利得超额_BP": _difference(strategy_metrics.get("capital_gain_total_bp"), benchmark_metrics.get("capital_gain_total_bp")),
         "资本利得交易胜率": strategy_metrics.get("capital_gain_trade_win_rate"),
         "平均单笔资本利得_BP": strategy_metrics.get("capital_gain_avg_trade_bp"),
+        "平均每笔盈利_BP": strategy_metrics.get("capital_gain_avg_win_bp"),
         "最差交易_BP": strategy_metrics.get("capital_gain_worst_trade_bp"),
+        "平均每笔持有交易日": strategy_metrics.get("capital_gain_avg_holding_days"),
+        "最长单笔持有交易日": strategy_metrics.get("capital_gain_max_holding_days"),
         "资本利得最大回撤_BP": strategy_metrics.get("capital_gain_max_drawdown_bp"),
         "基准资本利得最大回撤_BP": benchmark_metrics.get("capital_gain_max_drawdown_bp"),
         "输入数据": {
             "交易标的收益率曲线": _file_fingerprint(asset_path),
-            "基准收益率曲线": _file_fingerprint(benchmark_path),
-            "周度看板信号": _file_fingerprint(signal_path),
+            "条件基准使用的10Y国债收益率曲线": _file_fingerprint(benchmark_path),
+            "看板信号": _file_fingerprint(signal_path),
         },
         "代码文件": {
             "策略逻辑": _file_fingerprint(root / "strategies" / "dashboard_signal_v1.py"),
@@ -108,6 +115,7 @@ def list_experiments(root: Path) -> pd.DataFrame:
                 "运行时间": manifest.get("运行时间", ""),
                 "策略名称": manifest.get("策略名称", ""),
                 "运行来源": manifest.get("运行来源", ""),
+                "信号频率": manifest.get("信号频率", "周频"),
                 "比较基准": manifest.get("比较基准", "10Y地方政府债"),
                 "BP口径": manifest.get("资本利得BP口径", "久期折算价格收益BP（旧口径）"),
                 "回测起始日期": manifest.get("回测起始日期", ""),
@@ -126,10 +134,14 @@ def list_experiments(root: Path) -> pd.DataFrame:
                 "资本利得交易胜率": trade_metrics.get("capital_gain_trade_win_rate", manifest.get("资本利得交易胜率")),
                 "已平仓交易数": trade_metrics.get("capital_gain_closed_trade_count"),
                 "盈利交易数": trade_metrics.get("capital_gain_winning_trades"),
+                "亏损交易数": trade_metrics.get("capital_gain_losing_trades"),
                 "平均单笔资本利得_BP": trade_metrics.get("capital_gain_avg_trade_bp", manifest.get("平均单笔资本利得_BP")),
+                "平均每笔盈利_BP": trade_metrics.get("capital_gain_avg_win_bp", manifest.get("平均每笔盈利_BP")),
                 "平均单笔亏损_BP": trade_metrics.get("capital_gain_avg_loss_bp"),
                 "资本利得盈亏比": trade_metrics.get("capital_gain_profit_loss_ratio"),
                 "最差交易_BP": trade_metrics.get("capital_gain_worst_trade_bp", manifest.get("最差交易_BP")),
+                "平均每笔持有交易日": trade_metrics.get("capital_gain_avg_holding_days", manifest.get("平均每笔持有交易日")),
+                "最长单笔持有交易日": trade_metrics.get("capital_gain_max_holding_days", manifest.get("最长单笔持有交易日")),
                 "资本利得最大回撤_BP": trade_metrics.get("capital_gain_max_drawdown_bp", manifest.get("资本利得最大回撤_BP")),
                 "资本利得最大回撤起点": trade_metrics.get("capital_gain_max_drawdown_start"),
                 "资本利得最大回撤终点": trade_metrics.get("capital_gain_max_drawdown_end"),
@@ -149,7 +161,9 @@ def load_experiment_result(
     config = load_strategy_config(experiment_dir / "config.json")
     nav = pd.read_csv(experiment_dir / "strategy_nav.csv", encoding="utf-8-sig")
     mapping = {
-        "日期": "date", "信号日期": "signal_date", "策略日收益率": "strategy_return", "基准日收益率": "total_return",
+        "日期": "date", "信号日期": "signal_date", "目标仓位": "目标仓位", "止盈止损事件": "止盈止损事件",
+        "条件基准仓位": "comparison_position", "交易标的到期收益率_百分比": "asset_yield_pct", "比较基准到期收益率_百分比": "yield_pct",
+        "策略日收益率": "strategy_return", "基准日收益率": "total_return",
         "策略票息Carry收益": "strategy_carry_return", "策略资本利得收益": "strategy_capital_return",
         "基准票息Carry收益": "benchmark_carry_return", "基准资本利得收益": "benchmark_capital_return",
         "票息Carry超额": "carry_excess_return", "资本利得超额": "capital_excess_return",
@@ -180,18 +194,21 @@ def load_experiment_result(
     signals.attrs["position_policy"] = config.positions.as_dict()
     signals.attrs["weights"] = config.weights.as_dict()
     signals.attrs["thresholds"] = config.thresholds.as_dict()
+    signals.attrs["signal_frequency"] = config.signal_frequency
 
     metrics_frame = pd.read_csv(experiment_dir / "performance_metrics.csv", encoding="utf-8-sig")
     strategy_metrics = _metrics_from_archive(metrics_frame, "策略")
     benchmark_metrics = _metrics_from_archive(metrics_frame, "基准")
-    benchmark_metrics["benchmark_id"] = config.benchmark_id
-    benchmark_metrics["benchmark_name"] = benchmark_label(config.benchmark_id)
+    manifest_path = experiment_dir / "run_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
+    benchmark_metrics["benchmark_id"] = manifest.get("基准ID", config.benchmark_id)
+    benchmark_metrics["benchmark_name"] = manifest.get("比较基准", benchmark_label(config.benchmark_id))
     # Always rebuild trade-level metrics from the archived position path. Older
     # archives may contain the former weekly-period trade count even when their
     # daily NAV and position snapshots are otherwise complete.
     strategy_metrics.update(capital_gain_trade_metrics(daily, "strategy_capital_bp", position_col="仓位"))
-    benchmark_metrics.update(capital_gain_trade_metrics(daily, "benchmark_capital_bp", position_col=None))
-    manifest_path = experiment_dir / "run_manifest.json"
+    benchmark_position_col = "comparison_position" if "comparison_position" in daily else None
+    benchmark_metrics.update(capital_gain_trade_metrics(daily, "benchmark_capital_bp", position_col=benchmark_position_col))
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         definition = manifest.get("资本利得BP口径", "久期折算价格收益BP（旧口径）")
@@ -209,6 +226,7 @@ def _archived_strategy_trade_metrics(experiment_dir: Path) -> dict[str, object]:
         frame = frame.rename(
             columns={
                 "日期": "date",
+                "条件基准仓位": "comparison_position",
                 "策略资本利得收益": "strategy_capital_return",
                 "基准资本利得收益": "benchmark_capital_return",
                 "策略资本利得_BP": "strategy_capital_bp",
@@ -220,7 +238,8 @@ def _archived_strategy_trade_metrics(experiment_dir: Path) -> dict[str, object]:
             frame["strategy_capital_bp"] = pd.to_numeric(frame["strategy_capital_return"], errors="coerce").fillna(0.0) * 10000.0
             frame["benchmark_capital_bp"] = pd.to_numeric(frame["benchmark_capital_return"], errors="coerce").fillna(0.0) * 10000.0
         strategy_metrics = capital_gain_trade_metrics(frame, "strategy_capital_bp", position_col="仓位")
-        benchmark_metrics = capital_gain_trade_metrics(frame, "benchmark_capital_bp", position_col=None)
+        benchmark_position_col = "comparison_position" if "comparison_position" in frame else None
+        benchmark_metrics = capital_gain_trade_metrics(frame, "benchmark_capital_bp", position_col=benchmark_position_col)
         benchmark_nav = pd.to_numeric(frame.get("基准净值"), errors="coerce")
         benchmark_max_drawdown = None
         if benchmark_nav is not None and benchmark_nav.notna().any():

@@ -40,11 +40,13 @@ METRIC_LABELS = {
     "capital_gain_trade_win_rate": "资本利得交易胜率",
     "capital_gain_avg_trade_bp": "平均单笔资本利得_BP",
     "capital_gain_median_trade_bp": "资本利得中位数_BP",
-    "capital_gain_avg_win_bp": "平均盈利交易_BP",
-    "capital_gain_avg_loss_bp": "平均亏损交易_BP",
+    "capital_gain_avg_win_bp": "平均每笔盈利_BP",
+    "capital_gain_avg_loss_bp": "平均每笔亏损_BP",
     "capital_gain_profit_loss_ratio": "资本利得盈亏比",
     "capital_gain_best_trade_bp": "最佳交易_BP",
     "capital_gain_worst_trade_bp": "最差交易_BP",
+    "capital_gain_avg_holding_days": "平均每笔持有交易日",
+    "capital_gain_max_holding_days": "最长单笔持有交易日",
     "capital_gain_max_drawdown_bp": "资本利得最大回撤_BP",
     "capital_gain_max_drawdown_start": "资本利得最大回撤起点",
     "capital_gain_max_drawdown_end": "资本利得最大回撤终点",
@@ -171,7 +173,10 @@ def _write_strategy_nav(daily: pd.DataFrame, path: Path) -> None:
             "信号日期": daily["signal_date"].dt.strftime("%Y-%m-%d"),
             "总分": daily["总分"],
             "结论": daily["结论"],
+            "目标仓位": daily.get("目标仓位", daily["仓位"]),
             "仓位": daily["仓位"],
+            "止盈止损事件": daily.get("止盈止损事件", pd.Series("", index=daily.index, dtype=object)),
+            "条件基准仓位": daily.get("comparison_position", pd.Series(index=daily.index, dtype=float)),
             "交易标的到期收益率_百分比": daily.get("asset_yield_pct", pd.Series(index=daily.index, dtype=float)),
             "比较基准到期收益率_百分比": daily.get("yield_pct", pd.Series(index=daily.index, dtype=float)),
             "策略日收益率": daily["strategy_return"],
@@ -203,14 +208,14 @@ def _write_strategy_nav(daily: pd.DataFrame, path: Path) -> None:
 def _write_capital_gain_trades(daily: pd.DataFrame, path: Path) -> None:
     trades = capital_gain_trade_table(daily)
     if trades.empty:
-        pd.DataFrame(columns=["交易编号", "开仓日期", "平仓日期", "估值日期", "方向", "开仓仓位", "平均绝对仓位", "持有交易日", "策略资本利得_BP", "同期满仓基准资本利得_BP", "资本利得超额_BP", "是否盈利", "是否已平仓", "状态"]).to_csv(path, index=False, encoding="utf-8-sig")
+        pd.DataFrame(columns=["交易编号", "开仓日期", "平仓日期", "估值日期", "方向", "开仓仓位", "平均绝对仓位", "持有交易日", "策略资本利得_BP", "同期条件基准资本利得_BP", "资本利得超额_BP", "是否盈利", "是否已平仓", "状态"]).to_csv(path, index=False, encoding="utf-8-sig")
         return
     out = trades.rename(
         columns={
             "trade_id": "交易编号", "entry_date": "开仓日期", "exit_date": "平仓日期", "mark_date": "估值日期",
             "direction": "方向", "entry_position": "开仓仓位", "average_abs_position": "平均绝对仓位",
             "holding_days": "持有交易日", "strategy_capital_bp": "策略资本利得_BP",
-            "benchmark_capital_bp": "同期满仓基准资本利得_BP", "capital_excess_bp": "资本利得超额_BP",
+            "benchmark_capital_bp": "同期条件基准资本利得_BP", "capital_excess_bp": "资本利得超额_BP",
             "is_win": "是否盈利", "is_closed": "是否已平仓", "status": "状态",
         }
     )
@@ -222,7 +227,7 @@ def _write_capital_gain_trades(daily: pd.DataFrame, path: Path) -> None:
 
 
 def _classify_period(position: float, strategy_return: float, benchmark_return: float, excess_return: float) -> str:
-    if position < 0 and benchmark_return > 0 and strategy_return < 0:
+    if position < 0 and strategy_return < 0:
         return "做空做反"
     if 0 <= position < 1 and benchmark_return > 0 and excess_return < 0:
         return "低仓少吃"
@@ -344,6 +349,8 @@ def _capital_trade_metric_table(strategy_metrics: dict[str, object], benchmark_m
         "capital_gain_profit_loss_ratio",
         "capital_gain_best_trade_bp",
         "capital_gain_worst_trade_bp",
+        "capital_gain_avg_holding_days",
+        "capital_gain_max_holding_days",
         "capital_gain_max_drawdown_bp",
         "capital_gain_longest_losing_streak",
         "capital_gain_open_trade_count",
@@ -356,9 +363,12 @@ def _capital_trade_metric_table(strategy_metrics: dict[str, object], benchmark_m
         if key == "capital_gain_trade_win_rate":
             strategy_text = _format_metric(strategy, True)
             benchmark_text = _format_metric(benchmark, True)
-        elif key in {"capital_gain_trade_count", "capital_gain_closed_trade_count", "capital_gain_winning_trades", "capital_gain_losing_trades", "capital_gain_longest_losing_streak", "capital_gain_open_trade_count"}:
+        elif key in {"capital_gain_trade_count", "capital_gain_closed_trade_count", "capital_gain_winning_trades", "capital_gain_losing_trades", "capital_gain_longest_losing_streak", "capital_gain_open_trade_count", "capital_gain_max_holding_days"}:
             strategy_text = "" if strategy is None else str(int(strategy))
             benchmark_text = "" if benchmark is None else str(int(benchmark))
+        elif key == "capital_gain_avg_holding_days":
+            strategy_text = "" if strategy is None else f"{float(strategy):.1f} 交易日"
+            benchmark_text = "" if benchmark is None else f"{float(benchmark):.1f} 交易日"
         elif key == "capital_gain_profit_loss_ratio":
             strategy_text = _format_metric(strategy)
             benchmark_text = _format_metric(benchmark)
@@ -436,9 +446,9 @@ def _diagnostics_html(diagnostics: pd.DataFrame) -> str:
 
     return "\n".join(
         [
-            "<h3>周度资本利得判断统计</h3>",
+            "<h3>信号周期资本利得判断统计</h3>",
             counts_html,
-            "<h3>资本利得亏损最大的周度周期</h3>",
+            "<h3>资本利得亏损最大的信号周期</h3>",
             drag_display.to_html(index=False, escape=False),
         ]
     )
@@ -449,10 +459,10 @@ def _weights_rows(weights: dict[str, object]) -> str:
         ("供给：未来一周发行量", "supply_amount", "发行压力低利多，高利空"),
         ("供给：地方债发行占比", "supply_ratio", "地方债相对供给低利多，高利空"),
         ("供给：10Y以上发行量", "supply_long", "长端供给低利多，高利空"),
-        ("供给：发飞", "fly_penalty", "出现发飞视为供给冲击，额外扣分"),
+        ("供给：发飞（停用）", "fly_penalty", "历史覆盖不足，当前固定为0，不参与回测"),
         ("银行需求", "bank_demand", "银行净买入强利多，弱利空"),
         ("地方债-国债利差", "spread_gov", "利差高代表补偿较厚，利多；低则利空"),
-        ("利差周度变化", "spread_change", "利差明显收窄利多，明显走阔利空"),
+        ("利差一周变化", "spread_change", "利差明显收窄利多，明显走阔利空"),
         ("地方债-NCD利差", "spread_ncd", "相对资金/存单收益补偿高利多，低利空"),
         ("非银情绪", "nonbank_sentiment", "纯债基金净申购利多，净赎回利空"),
     ]
@@ -517,8 +527,17 @@ def _write_strategy_html_report(
     bullish_position = policy.get("bullish_position", 1.0)
     neutral_position = policy.get("neutral_position", 0.5)
     bearish_position = policy.get("bearish_position", -1.0)
+    take_profit_bp = float(policy.get("take_profit_bp", 0.0) or 0.0)
+    stop_loss_bp = float(policy.get("stop_loss_bp", 0.0) or 0.0)
+    stop_rule_text = (
+        f"止盈 {take_profit_bp:g}BP" if take_profit_bp > 0 else "止盈停用"
+    ) + "；" + (
+        f"止损 {stop_loss_bp:g}BP" if stop_loss_bp > 0 else "止损停用"
+    )
     weights_rows = _weights_rows(signals.attrs.get("weights", {}))
     benchmark_name = str(benchmark_metrics.get("benchmark_name", "10Y地方政府债"))
+    signal_frequency = str(signals.attrs.get("signal_frequency", "weekly"))
+    frequency_name = "日频" if signal_frequency == "daily" else "周频"
     html = f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -549,21 +568,23 @@ def _write_strategy_html_report(
     <div class="card"><div class="label">区间</div><div class="value">{strategy_metrics['start_date']} 至 {strategy_metrics['end_date']}</div></div>
     <div class="card"><div class="label">累计资本利得（收益率变动）</div><div class="value">{strategy_metrics['capital_gain_total_bp']:.2f} BP</div></div>
     <div class="card"><div class="label">已平仓交易胜率</div><div class="value">{_format_metric(strategy_metrics['capital_gain_trade_win_rate'], True) or '暂无已平仓'}</div></div>
-    <div class="card"><div class="label">平均单笔 / 最差交易</div><div class="value">{_format_metric(strategy_metrics['capital_gain_avg_trade_bp']) or '-'} / {_format_metric(strategy_metrics['capital_gain_worst_trade_bp']) or '-'} BP</div></div>
+    <div class="card"><div class="label">平均每笔盈利 / 平均每笔亏损</div><div class="value">{_format_metric(strategy_metrics['capital_gain_avg_win_bp']) or '-'} / {_format_metric(strategy_metrics['capital_gain_avg_loss_bp']) or '-'} BP</div></div>
   </div>
 
   <h2>策略设计</h2>
   <ul>
     <li>策略目标：以交易盘视角检验地方债看板对10Y地方债资本利得的择时能力。</li>
     <li>交易定义：仓位从0变为非0时开仓，回到0时平仓；多空反向视为先平旧仓再开新仓，同方向加减仓不拆分交易。</li>
+    <li>信号频率：{frequency_name}。{'每个交易日更新信号和目标仓位，利差变化采用5个交易日口径。' if signal_frequency == 'daily' else '每周更新看板信号和目标仓位。'}</li>
     <li>交易标的：用 <code>地方政府债到期收益率:10年</code> 构造的 10Y 地方债合成总收益。</li>
-    <li>比较基准：100%长期持有 {html_lib.escape(benchmark_name)} 的合成总收益。</li>
+    <li>条件基准：{html_lib.escape(benchmark_name)}。策略仓位为正时，基准按相同仓位买入10Y国债；仓位为0或负时，基准持有现金，资本利得为0。</li>
     <li>仓位规则：总分 ≥ {bullish_threshold:g} 看多，仓位 {bullish_position:g}；{bearish_threshold:g} 至 {bullish_threshold:g} 中性，仓位 {neutral_position:g}；低于 {bearish_threshold:g} 看空，仓位 {bearish_position:g}。</li>
+    <li>止盈止损：{stop_rule_text}。触发日资本利得计入该笔交易，随后清仓；同方向信号持续禁开，直到信号先转为中性或反向。</li>
     <li>当前版本定位：规则版 v1，重点是可解释和可调整，不做参数优化。</li>
   </ul>
 
   <h2>资本利得交易绩效</h2>
-  <p>资本利得BP按每日 <code>-仓位 × YTM变化_BP</code> 累加，不乘久期。多头遇到收益率下行、空头遇到收益率上行时记为正值。胜率只统计已平仓交易；样本末仍持有的交易计入累计和浮动资本利得，但不进入胜率。</p>
+  <p>资本利得BP按每日 <code>-仓位 × YTM变化_BP</code> 累加，不乘久期。多头超额为同仓位地方债资本利得减同仓位国债资本利得；空仓或空头的比较基准为现金，因此空头超额等于做空地方债的资本利得。胜率只统计已平仓交易。</p>
   <table><thead><tr><th>指标</th><th>策略</th><th>基准</th></tr></thead><tbody>{_capital_trade_metric_table(strategy_metrics, benchmark_metrics)}</tbody></table>
 
   <h2>交互图表</h2>
@@ -576,18 +597,18 @@ def _write_strategy_html_report(
   </table>
 
   <h2>收益归因：资本利得 vs carry</h2>
-  <p>本项目以资本利得为主，carry仅作为辅助解释。传统总收益仍保留，便于与长期持有基准和底仓型账户比较。</p>
+  <p>本项目以资本利得为主，carry仅作为辅助解释。传统总收益也使用同一条件基准：多头同仓位持有国债，非多头持有现金。</p>
   <table>
     <thead><tr><th>项目</th><th>区间累计贡献</th><th>解释</th></tr></thead>
     <tbody>{_attribution_table(daily, benchmark_name)}</tbody>
   </table>
 
   <h2>逐笔交易诊断</h2>
-  <p>逐笔交易按开仓到平仓拆分；周度 <code>period_diagnostics.csv</code> 另用于定位信号错判周期，两者口径不同。</p>
+  <p>逐笔交易按开仓到平仓拆分；<code>period_diagnostics.csv</code> 按当前信号频率定位错判周期，两者口径不同。</p>
   {_diagnostics_html(diagnostics)}
 
   <h2>信号与权重</h2>
-  <p>看板因子先判断利多、利空或中性，再按权重折算为总分。发飞作为供给冲击惩罚项，而不是正向权重。</p>
+  <p>看板因子先判断利多、利空或中性，再按权重折算为总分。发飞字段目前仅有2026年少数周的有效观测，因此本轮固定为0，不参与评分或供给模块利空判断。</p>
   <table>
     <thead><tr><th>模块/因子</th><th>权重</th><th>判断逻辑</th></tr></thead>
     <tbody>{weights_rows}</tbody>
@@ -767,9 +788,9 @@ def _strategy_charts_html(daily: pd.DataFrame) -> str:
     position_bar = (
         Bar(init_opts=opts.InitOpts(width="100%", height="360px"))
         .add_xaxis(signal_dates)
-        .add_yaxis("周度仓位", signal_positions)
+        .add_yaxis("信号仓位", signal_positions)
         .set_global_opts(
-            title_opts=opts.TitleOpts(title="周度仓位变化"),
+            title_opts=opts.TitleOpts(title="信号仓位变化"),
             tooltip_opts=opts.TooltipOpts(trigger="axis"),
             datazoom_opts=[
                 opts.DataZoomOpts(type_="inside"),

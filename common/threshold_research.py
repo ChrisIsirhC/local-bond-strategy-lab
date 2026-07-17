@@ -10,15 +10,24 @@ import pandas as pd
 
 from common.config import DashboardStrategyConfig, ObjectiveConfig, load_strategy_config, save_strategy_config
 from common.experiments import archive_dashboard_experiment
-from common.market_data import load_market_data
+from common.market_data import GOV_10Y, load_market_data
+from common.period_evaluation import (
+    DEFAULT_TRAINING_END,
+    append_search_evaluation_html,
+    evaluate_periods,
+    generalization_summary,
+    period_summary_frame,
+    top_stability_summary,
+)
 from common.reporting import _build_period_diagnostics, write_strategy_outputs
 from common.runner import run_dashboard_config
-from common.trade_metrics import select_executed_weekly_positions, vectorized_capital_trade_metrics
-from strategies.dashboard_signal_v1 import DashboardThresholds, DashboardWeights
+from common.trade_metrics import apply_capital_stop_rules, vectorized_capital_trade_metrics
+from strategies.dashboard_signal_v1 import DashboardThresholds, DashboardWeights, signal_file_for_frequency
 from strategies.position_policy import DashboardPositionPolicy
 
 
 OUTPUT_DIR = Path("backtest_outputs") / "阈值调参实验_v1"
+OUTPUT_DIR_DAILY = Path("backtest_outputs") / "阈值调参实验_v1_日频"
 BASE_CONFIG = Path("configs") / "experiments" / "阈值实验基线_原始权重_满仓多空.json"
 
 MODULE_LABELS = {
@@ -46,7 +55,7 @@ EXPORT_COLUMNS = {
     "bearish_threshold": "看空总分阈值",
     "bearish_min_core_factors": "看空最少利空模块数",
     "bearish_require_supply_or_demand": "看空要求供给或需求利空",
-    "bearish_confirmation_periods": "看空连续确认周数",
+    "bearish_confirmation_periods": "看空连续确认周期数",
     "objective": "目标函数",
     "strategy_total_return": "策略累计收益率",
     "benchmark_total_return": "基准累计收益率",
@@ -61,6 +70,7 @@ EXPORT_COLUMNS = {
     "capital_gain_trade_count": "开仓交易总数",
     "capital_gain_closed_trade_count": "已平仓交易数",
     "capital_gain_avg_trade_bp": "平均单笔资本利得_BP",
+    "capital_gain_avg_win_bp": "平均每笔盈利_BP",
     "capital_gain_best_trade_bp": "最佳交易_BP",
     "capital_gain_worst_trade_bp": "最差交易_BP",
     "capital_gain_max_drawdown_bp": "资本利得最大回撤_BP",
@@ -80,10 +90,13 @@ def run_threshold_research(
     root: Path,
     objective_config: ObjectiveConfig | None = None,
     base_config_override: DashboardStrategyConfig | None = None,
+    training_end: str = DEFAULT_TRAINING_END,
+    archive_source: str = "阈值向量化搜索",
+    final_strategy_name: str | None = None,
 ) -> dict[str, object]:
-    output_dir = root / OUTPUT_DIR
-    output_dir.mkdir(parents=True, exist_ok=True)
     selected_base = base_config_override or load_strategy_config(root / BASE_CONFIG)
+    output_dir = root / (OUTPUT_DIR_DAILY if selected_base.signal_frequency == "daily" else OUTPUT_DIR)
+    output_dir.mkdir(parents=True, exist_ok=True)
     base_config = DashboardStrategyConfig(
         name=selected_base.name,
         weights=selected_base.weights,
@@ -92,9 +105,10 @@ def run_threshold_research(
         objective=objective_config or selected_base.objective,
         backtest_start=None,
         backtest_end=None,
-        benchmark_id=selected_base.benchmark_id,
+        benchmark_id=GOV_10Y,
+        signal_frequency=selected_base.signal_frequency,
     )
-    context = _build_search_context(root, base_config.benchmark_id)
+    context = _build_search_context(root, end_date=training_end, signal_frequency=base_config.signal_frequency)
     module_options = _module_options(context["factor_values"], base_config.thresholds)
 
     stage1_candidates = [_candidate(base_config, "阈值原始基线", "基线", "全部")]
@@ -115,12 +129,13 @@ def run_threshold_research(
     )
 
     score_rule_candidates: list[dict[str, object]] = []
+    period_unit = "天" if base_config.signal_frequency == "daily" else "周"
     rules = [
         ("仅总分", 0, 0, 1),
         ("至少2个模块利空", 2, 0, 1),
         ("必须包含供给或需求利空", 0, 1, 1),
         ("至少2个模块且包含供需利空", 2, 1, 1),
-        ("连续2周看空", 0, 0, 2),
+        (f"连续2{period_unit}看空", 0, 0, 2),
     ]
     for bearish_threshold, (rule_name, min_modules, require_supply_demand, periods) in product(
         [15.0, 20.0, 25.0, 30.0, 35.0, 40.0], rules
@@ -190,6 +205,8 @@ def run_threshold_research(
     ).reset_index(drop=True)
     best_row = results.iloc[0]
     best_config = _config_from_result(base_config, best_row)
+    if final_strategy_name:
+        best_config = replace(best_config, name=final_strategy_name)
     best_config_path = root / "configs" / "experiments" / f"{_safe_config_name(best_config.name)}.json"
     save_strategy_config(
         best_config,
@@ -198,6 +215,8 @@ def run_threshold_research(
 
     baseline_daily, baseline_signals, baseline_metrics, baseline_benchmark_metrics = run_dashboard_config(root, base_config)
     best_daily, best_signals, best_metrics, best_benchmark_metrics = run_dashboard_config(root, best_config)
+    baseline_periods = evaluate_periods(baseline_daily, baseline_signals, training_end, baseline_benchmark_metrics["benchmark_name"])
+    best_periods = evaluate_periods(best_daily, best_signals, training_end, best_benchmark_metrics["benchmark_name"])
     write_strategy_outputs(
         best_daily,
         best_signals,
@@ -221,9 +240,9 @@ def run_threshold_research(
         diagnostics,
         base_config,
         best_config,
-        baseline_metrics,
-        best_metrics,
-        best_benchmark_metrics,
+        baseline_periods["搜索期"]["strategy_metrics"],
+        best_periods["搜索期"]["strategy_metrics"],
+        best_periods["搜索期"]["benchmark_metrics"],
         output_dir / "阈值调参报告.html",
     )
     experiment_dir = archive_dashboard_experiment(
@@ -233,19 +252,59 @@ def run_threshold_research(
         best_signals,
         best_metrics,
         best_benchmark_metrics,
-        source="阈值向量化搜索",
+        source=archive_source,
+        research_metadata={"训练截止日": training_end, "样本外起始日": (pd.Timestamp(training_end) + pd.Timedelta(days=1)).date().isoformat()},
     )
+    period_frame = period_summary_frame(best_periods)
+    top_training = results.head(20).reset_index(drop=True)
+    oos_context = _build_search_context(
+        root,
+        start_date=(pd.Timestamp(training_end) + pd.Timedelta(days=1)).date().isoformat(),
+        signal_frequency=base_config.signal_frequency,
+    )
+    if len(oos_context["daily"]) and not top_training.empty:
+        oos_results, _ = _evaluate_candidates(
+            oos_context, top_training.to_dict(orient="records"), base_config.weights, base_config.objective
+        )
+        stability_frame = top_training[["objective", "capital_gain_total_bp", "capital_gain_excess_bp"]].copy()
+        stability_frame.columns = ["training_objective", "training_capital_gain_total_bp", "training_capital_gain_excess_bp"]
+        stability_frame["oos_capital_gain_total_bp"] = oos_results["capital_gain_total_bp"].to_numpy()
+        stability_frame["oos_capital_gain_excess_bp"] = oos_results["capital_gain_excess_bp"].to_numpy()
+        stability_frame.insert(0, "training_rank", range(1, len(stability_frame) + 1))
+    else:
+        stability_frame = pd.DataFrame()
+    generalization = generalization_summary(best_periods)
+    stability = top_stability_summary(stability_frame)
+    period_frame.to_csv(output_dir / "最优策略_分区间表现.csv", index=False, encoding="utf-8-sig")
+    stability_frame.to_csv(output_dir / "Top候选_样本外稳定性.csv", index=False, encoding="utf-8-sig")
+    period_frame.to_csv(experiment_dir / "period_evaluation.csv", index=False, encoding="utf-8-sig")
+    stability_frame.to_csv(experiment_dir / "top_stability.csv", index=False, encoding="utf-8-sig")
+    append_search_evaluation_html(output_dir / "阈值调参报告.html", period_frame, stability_frame, generalization, stability)
     return {
         **best_metrics,
+        "strategy_name": best_config.name,
+        "capital_gain_excess_bp": float(
+            best_metrics["capital_gain_total_bp"] - best_benchmark_metrics["capital_gain_total_bp"]
+        ),
         "candidate_count": int(len(results)),
         "best_config_path": str(best_config_path),
         "report_path": str(output_dir / "阈值调参报告.html"),
         "experiment_dir": str(experiment_dir),
+        "training_end": training_end,
+        "period_evaluation": period_frame.to_dict(orient="records"),
+        "generalization": generalization,
+        "stability": stability,
     }
 
 
-def _build_search_context(root: Path, benchmark_id: str) -> dict[str, object]:
-    signal_path = root / "data_processed" / "图表指标_周度宽表_统一日期.csv"
+def _build_search_context(
+    root: Path,
+    benchmark_id: str = GOV_10Y,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    signal_frequency: str = "weekly",
+) -> dict[str, object]:
+    signal_path = root / signal_file_for_frequency(signal_frequency)
     raw = pd.read_csv(signal_path, encoding="utf-8-sig")
     factor_values = pd.DataFrame(
         {
@@ -253,7 +312,7 @@ def _build_search_context(root: Path, benchmark_id: str) -> dict[str, object]:
             "supply_amount": _pct_to_100(raw["未来一周地方债发行量_1年内滚动分位数"]),
             "supply_ratio": _pct_to_100(raw["未来一周地方债发行量/（国债发行量+地方债发行量）_1年内滚动分位数"]),
             "supply_long": _pct_to_100(raw["地方债发行10年以上绝对发行量_1年内滚动分位数"]),
-            "fly": raw["过去一周是否有地方债“发飞”"].astype(str).str.strip().eq("是").to_numpy(),
+            "fly": np.zeros(len(raw), dtype=bool),
             "bank": _pct_to_100(raw["银行过去一周净买入金额_1Y滚动分位数"]),
             "spread": _pct_to_100(raw["10年好地区一般债-10年国债活跃券利差_1年内滚动分位数"]),
             "spread_change": pd.to_numeric(raw["上述利差周度变化情况"], errors="coerce"),
@@ -263,6 +322,10 @@ def _build_search_context(root: Path, benchmark_id: str) -> dict[str, object]:
     ).sort_values("signal_date").reset_index(drop=True)
 
     market = load_market_data(root, benchmark_id)
+    if start_date:
+        market = market.loc[market["date"] >= pd.Timestamp(start_date)].copy()
+    if end_date:
+        market = market.loc[market["date"] <= pd.Timestamp(end_date)].copy()
     mapping = factor_values[["signal_date"]].reset_index(names="signal_index")
     daily = pd.merge_asof(
         market.sort_values("date"),
@@ -358,7 +421,7 @@ def _evaluate_candidates(
         0.0,
         100.0,
     )
-    supply_bearish = ((supply_amount == 0).astype(int) + (supply_ratio == 0).astype(int) + (supply_long == 0).astype(int) >= 2) | fly
+    supply_bearish = (supply_amount == 0).astype(int) + (supply_ratio == 0).astype(int) + (supply_long == 0).astype(int) >= 2
     demand_bearish = bank == 0
     valuation_bearish = (spread == 0).astype(int) + (spread_change == 0).astype(int) + (ncd == 0).astype(int) >= 2
     sentiment_bearish = nonbank == 0
@@ -386,10 +449,9 @@ def _evaluate_candidates(
         bearish[selector] = confirmed
 
     weekly_positions = _candidate_position_matrix(scores, bearish, params)
-    executed_weekly_positions, executed_signal_ids = select_executed_weekly_positions(
-        weekly_positions, signal_index
-    )
-    daily_positions = weekly_positions[:, signal_index]
+    executed_signal_ids = np.unique(signal_index)
+    executed_weekly_positions = weekly_positions[:, executed_signal_ids]
+    target_daily_positions = weekly_positions[:, signal_index]
     daily_returns = pd.to_numeric(daily["asset_total_return"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
     daily_capital_returns = pd.to_numeric(daily["asset_duration_pnl"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
     benchmark_daily_returns = pd.to_numeric(daily["total_return"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
@@ -398,14 +460,23 @@ def _evaluate_candidates(
     benchmark_capital_bp_daily = -pd.to_numeric(daily["yield_change_bp"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
     for values in [daily_returns, daily_capital_returns, benchmark_daily_returns, benchmark_daily_capital_returns, asset_capital_bp, benchmark_capital_bp_daily]:
         values[0] = 0.0
+    daily_positions, stop_events = apply_capital_stop_rules(
+        target_daily_positions,
+        asset_capital_bp,
+        signal_index,
+        params["take_profit_bp"].to_numpy(dtype=float),
+        params["stop_loss_bp"].to_numpy(dtype=float),
+    )
+    comparison_positions = np.clip(daily_positions, 0.0, None)
     returns = daily_positions * daily_returns[None, :]
+    benchmark_returns = comparison_positions * benchmark_daily_returns[None, :]
     capital_returns = daily_positions * daily_capital_returns[None, :]
     capital_bp = daily_positions * asset_capital_bp[None, :]
     nav = np.cumprod(1.0 + returns, axis=1)
-    benchmark_nav = np.cumprod(1.0 + benchmark_daily_returns)
+    benchmark_nav = np.cumprod(1.0 + benchmark_returns, axis=1)
     periods = max(len(daily_returns) - 1, 1)
     total_return = nav[:, -1] / nav[:, 0] - 1.0
-    benchmark_total_return = float(benchmark_nav[-1] / benchmark_nav[0] - 1.0)
+    benchmark_total_return = benchmark_nav[:, -1] / benchmark_nav[:, 0] - 1.0
     annual_return = (nav[:, -1] / nav[:, 0]) ** (252 / periods) - 1.0
     annual_vol = returns.std(axis=1) * math.sqrt(252)
     sharpe = np.divide(annual_return - 0.014, annual_vol, out=np.zeros(n), where=annual_vol != 0)
@@ -423,10 +494,13 @@ def _evaluate_candidates(
         capital_trade_columns.append(capital_bp[:, signal_index == signal_id].sum(axis=1))
     capital_trade_bp = np.column_stack(capital_trade_columns)
     capital_gain_bp = capital_bp.sum(axis=1)
-    benchmark_capital_gain_bp = float(benchmark_capital_bp_daily.sum())
+    benchmark_capital_bp = comparison_positions * benchmark_capital_bp_daily[None, :]
+    benchmark_capital_gain_bp = benchmark_capital_bp.sum(axis=1)
     capital_gain_excess_bp = capital_gain_bp - benchmark_capital_gain_bp
-    trade_stats = vectorized_capital_trade_metrics(executed_weekly_positions, capital_trade_bp)
+    trade_stats = vectorized_capital_trade_metrics(daily_positions, capital_bp, stop_events != 0)
     capital_trade_win_rate = np.nan_to_num(trade_stats["trade_win_rate"], nan=0.0)
+    capital_gain_avg_trade_bp = np.nan_to_num(trade_stats["average_trade_bp"], nan=0.0)
+    capital_gain_avg_win_bp = np.nan_to_num(trade_stats["average_win_bp"], nan=0.0)
     capital_cumulative_bp = np.cumsum(capital_bp, axis=1)
     capital_gain_max_drawdown_bp = np.min(
         capital_cumulative_bp - np.maximum.accumulate(capital_cumulative_bp, axis=1), axis=1
@@ -435,11 +509,11 @@ def _evaluate_candidates(
         objective_config.total_return_weight * total_return
         + objective_config.excess_return_weight * excess_total_return
         + objective_config.sharpe_weight * sharpe
-        + objective_config.max_drawdown_penalty * max_drawdown
         + objective_config.signal_win_rate_weight * signal_win_rate
         + objective_config.capital_gain_bp_weight * capital_gain_bp
         + objective_config.capital_gain_excess_bp_weight * capital_gain_excess_bp
         + objective_config.capital_trade_win_rate_weight * capital_trade_win_rate
+        + objective_config.capital_gain_avg_win_bp_weight * capital_gain_avg_win_bp
         + objective_config.capital_gain_drawdown_bp_penalty * capital_gain_max_drawdown_bp
     )
     carry = pd.to_numeric(daily["asset_carry_return"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
@@ -461,6 +535,7 @@ def _evaluate_candidates(
     result["capital_gain_trade_count"] = trade_stats["trade_count"]
     result["capital_gain_closed_trade_count"] = trade_stats["closed_trade_count"]
     result["capital_gain_avg_trade_bp"] = trade_stats["average_trade_bp"]
+    result["capital_gain_avg_win_bp"] = trade_stats["average_win_bp"]
     result["capital_gain_best_trade_bp"] = trade_stats["best_trade_bp"]
     result["capital_gain_worst_trade_bp"] = trade_stats["worst_trade_bp"]
     result["capital_gain_open_trade_count"] = trade_stats["open_trade_count"]
@@ -470,7 +545,7 @@ def _evaluate_candidates(
     result["strategy_carry_contribution"] = (daily_positions * carry[None, :]).sum(axis=1)
     result["strategy_capital_contribution"] = (daily_positions * capital[None, :]).sum(axis=1)
     result["latest_score"] = scores[:, executed_signal_ids[-1]]
-    result["latest_position"] = executed_weekly_positions[:, -1]
+    result["latest_position"] = daily_positions[:, -1]
     if baseline_weekly_positions is None:
         baseline_weekly_positions = executed_weekly_positions[0].copy()
     result["changed_signal_count"] = (
@@ -555,12 +630,13 @@ def _config_from_result(base: DashboardStrategyConfig, row: pd.Series) -> Dashbo
         bearish_confirmation_periods=int(row["bearish_confirmation_periods"]),
     )
     return DashboardStrategyConfig(
-        name=f"阈值搜索最优_{base.name}",
+        name=f"{'日频' if base.signal_frequency == 'daily' else '周频'}阈值搜索最优_{base.name}",
         weights=base.weights,
         thresholds=thresholds,
         positions=positions,
         objective=base.objective,
-        benchmark_id=base.benchmark_id,
+        benchmark_id=GOV_10Y,
+        signal_frequency=base.signal_frequency,
     )
 
 
@@ -634,6 +710,9 @@ def _write_html_report(
     from pyecharts.globals import CurrentConfig
 
     dependencies: set[str] = set()
+    frequency_name = "日频" if base_config.signal_frequency == "daily" else "周频"
+    period_unit = "天" if base_config.signal_frequency == "daily" else "周"
+    spread_change_name = "利差5日变化" if base_config.signal_frequency == "daily" else "利差周变化"
     chart_blocks: list[str] = []
     sensitivity = results.loc[results["stage"] == "单模块敏感性"]
     for module, group in sensitivity.groupby("module", sort=False):
@@ -671,7 +750,7 @@ def _write_html_report(
     pct_columns = [column for column in top.columns if "收益率" in column or column in {"策略最大回撤", "调仓周期胜率", "资本利得交易胜率"}]
     for column in pct_columns:
         top[column] = pd.to_numeric(top[column], errors="coerce").map(lambda value: "" if pd.isna(value) else f"{value:.2%}")
-    for column in ["累计资本利得_BP", "基准累计资本利得_BP", "资本利得超额_BP", "平均单笔资本利得_BP", "最佳交易_BP", "最差交易_BP", "资本利得最大回撤_BP"]:
+    for column in ["累计资本利得_BP", "基准累计资本利得_BP", "资本利得超额_BP", "平均每笔盈利_BP", "平均单笔资本利得_BP", "最佳交易_BP", "最差交易_BP", "资本利得最大回撤_BP"]:
         if column in top.columns:
             top[column] = pd.to_numeric(top[column], errors="coerce").map(lambda value: "" if pd.isna(value) else f"{value:.2f}")
     best = results.iloc[0]
@@ -694,29 +773,29 @@ def _write_html_report(
         )
     comparison = pd.DataFrame(
         [
-            {"指标": "累计资本利得", "原始阈值基线": baseline_metrics["capital_gain_total_bp"], "最佳方案": best_metrics["capital_gain_total_bp"], "长期持有基准": benchmark_metrics["capital_gain_total_bp"]},
-            {"指标": "资本利得交易胜率", "原始阈值基线": baseline_metrics["capital_gain_trade_win_rate"], "最佳方案": best_metrics["capital_gain_trade_win_rate"], "长期持有基准": benchmark_metrics["capital_gain_trade_win_rate"]},
-            {"指标": "平均单笔资本利得", "原始阈值基线": baseline_metrics["capital_gain_avg_trade_bp"], "最佳方案": best_metrics["capital_gain_avg_trade_bp"], "长期持有基准": benchmark_metrics["capital_gain_avg_trade_bp"]},
-            {"指标": "最差交易", "原始阈值基线": baseline_metrics["capital_gain_worst_trade_bp"], "最佳方案": best_metrics["capital_gain_worst_trade_bp"], "长期持有基准": benchmark_metrics["capital_gain_worst_trade_bp"]},
-            {"指标": "资本利得最大回撤", "原始阈值基线": baseline_metrics["capital_gain_max_drawdown_bp"], "最佳方案": best_metrics["capital_gain_max_drawdown_bp"], "长期持有基准": benchmark_metrics["capital_gain_max_drawdown_bp"]},
-            {"指标": "累计收益", "原始阈值基线": baseline_metrics["total_return"], "最佳方案": best_metrics["total_return"], "长期持有基准": benchmark_metrics["total_return"]},
-            {"指标": "年化收益", "原始阈值基线": baseline_metrics["annual_return"], "最佳方案": best_metrics["annual_return"], "长期持有基准": benchmark_metrics["annual_return"]},
-            {"指标": "最大回撤", "原始阈值基线": baseline_metrics["max_drawdown"], "最佳方案": best_metrics["max_drawdown"], "长期持有基准": benchmark_metrics["max_drawdown"]},
-            {"指标": "夏普比率", "原始阈值基线": baseline_metrics["sharpe"], "最佳方案": best_metrics["sharpe"], "长期持有基准": benchmark_metrics["sharpe"]},
-            {"指标": "调仓周期胜率", "原始阈值基线": baseline_metrics["signal_period_win_rate"], "最佳方案": best_metrics["signal_period_win_rate"], "长期持有基准": benchmark_metrics["signal_period_win_rate"]},
+            {"指标": "累计资本利得", "原始阈值基线": baseline_metrics["capital_gain_total_bp"], "最佳方案": best_metrics["capital_gain_total_bp"], "条件基准": benchmark_metrics["capital_gain_total_bp"]},
+            {"指标": "资本利得交易胜率", "原始阈值基线": baseline_metrics["capital_gain_trade_win_rate"], "最佳方案": best_metrics["capital_gain_trade_win_rate"], "条件基准": benchmark_metrics["capital_gain_trade_win_rate"]},
+            {"指标": "平均每笔盈利", "原始阈值基线": baseline_metrics["capital_gain_avg_win_bp"], "最佳方案": best_metrics["capital_gain_avg_win_bp"], "条件基准": benchmark_metrics["capital_gain_avg_win_bp"]},
+            {"指标": "最差交易", "原始阈值基线": baseline_metrics["capital_gain_worst_trade_bp"], "最佳方案": best_metrics["capital_gain_worst_trade_bp"], "条件基准": benchmark_metrics["capital_gain_worst_trade_bp"]},
+            {"指标": "资本利得最大回撤", "原始阈值基线": baseline_metrics["capital_gain_max_drawdown_bp"], "最佳方案": best_metrics["capital_gain_max_drawdown_bp"], "条件基准": benchmark_metrics["capital_gain_max_drawdown_bp"]},
+            {"指标": "累计收益", "原始阈值基线": baseline_metrics["total_return"], "最佳方案": best_metrics["total_return"], "条件基准": benchmark_metrics["total_return"]},
+            {"指标": "年化收益", "原始阈值基线": baseline_metrics["annual_return"], "最佳方案": best_metrics["annual_return"], "条件基准": benchmark_metrics["annual_return"]},
+            {"指标": "最大回撤", "原始阈值基线": baseline_metrics["max_drawdown"], "最佳方案": best_metrics["max_drawdown"], "条件基准": benchmark_metrics["max_drawdown"]},
+            {"指标": "夏普比率", "原始阈值基线": baseline_metrics["sharpe"], "最佳方案": best_metrics["sharpe"], "条件基准": benchmark_metrics["sharpe"]},
+            {"指标": "调仓周期胜率", "原始阈值基线": baseline_metrics["signal_period_win_rate"], "最佳方案": best_metrics["signal_period_win_rate"], "条件基准": benchmark_metrics["signal_period_win_rate"]},
         ]
     )
-    comparison[["原始阈值基线", "最佳方案", "长期持有基准"]] = comparison[["原始阈值基线", "最佳方案", "长期持有基准"]].astype(object)
+    comparison[["原始阈值基线", "最佳方案", "条件基准"]] = comparison[["原始阈值基线", "最佳方案", "条件基准"]].astype(object)
     for index in [0, 2, 3, 4]:
-        for column in ["原始阈值基线", "最佳方案", "长期持有基准"]:
+        for column in ["原始阈值基线", "最佳方案", "条件基准"]:
             comparison.loc[index, column] = f"{float(comparison.loc[index, column]):.2f} BP"
-    for column in ["原始阈值基线", "最佳方案", "长期持有基准"]:
+    for column in ["原始阈值基线", "最佳方案", "条件基准"]:
         value = comparison.loc[1, column]
         comparison.loc[1, column] = "暂无已平仓" if pd.isna(value) else f"{float(value):.2%}"
     for index in [5, 6, 7, 9]:
-        for column in ["原始阈值基线", "最佳方案", "长期持有基准"]:
+        for column in ["原始阈值基线", "最佳方案", "条件基准"]:
             comparison.loc[index, column] = f"{float(comparison.loc[index, column]):.2%}"
-    comparison.loc[8, ["原始阈值基线", "最佳方案", "长期持有基准"]] = comparison.loc[8, ["原始阈值基线", "最佳方案", "长期持有基准"]].map(lambda value: f"{float(value):.3f}")
+    comparison.loc[8, ["原始阈值基线", "最佳方案", "条件基准"]] = comparison.loc[8, ["原始阈值基线", "最佳方案", "条件基准"]].map(lambda value: f"{float(value):.3f}")
 
     threshold_rows = pd.DataFrame(
         [
@@ -724,11 +803,11 @@ def _write_html_report(
             {"参数": "银行需求分位", "原始": f"{base_config.thresholds.demand_low:g}/{base_config.thresholds.demand_high:g}", "最佳": f"{best_config.thresholds.demand_low:g}/{best_config.thresholds.demand_high:g}"},
             {"参数": "地方债-国债利差分位", "原始": f"{base_config.thresholds.spread_low:g}/{base_config.thresholds.spread_high:g}", "最佳": f"{best_config.thresholds.spread_low:g}/{best_config.thresholds.spread_high:g}"},
             {"参数": "地方债-NCD利差分位", "原始": f"{base_config.thresholds.ncd_low:g}/{base_config.thresholds.ncd_high:g}", "最佳": f"{best_config.thresholds.ncd_low:g}/{best_config.thresholds.ncd_high:g}"},
-            {"参数": "利差周变化", "原始": f"±{base_config.thresholds.spread_change_bp:g}BP", "最佳": f"±{best_config.thresholds.spread_change_bp:g}BP"},
+            {"参数": spread_change_name, "原始": f"±{base_config.thresholds.spread_change_bp:g}BP", "最佳": f"±{best_config.thresholds.spread_change_bp:g}BP"},
             {"参数": "看空总分", "原始": f"<{base_config.positions.bearish_threshold:g}", "最佳": f"<{best_config.positions.bearish_threshold:g}"},
             {"参数": "最少利空模块", "原始": base_config.positions.bearish_min_core_factors, "最佳": best_config.positions.bearish_min_core_factors},
             {"参数": "必须包含供给或需求利空", "原始": "否", "最佳": "是" if best_config.positions.bearish_require_supply_or_demand else "否"},
-            {"参数": "连续确认周数", "原始": base_config.positions.bearish_confirmation_periods, "最佳": best_config.positions.bearish_confirmation_periods},
+            {"参数": f"连续确认{period_unit}数", "原始": base_config.positions.bearish_confirmation_periods, "最佳": best_config.positions.bearish_confirmation_periods},
         ]
     )
     weights = pd.DataFrame(
@@ -745,15 +824,15 @@ def _write_html_report(
 body{{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHei",sans-serif}}main{{max-width:1280px;margin:auto;padding:48px 28px 80px}}h1{{font-size:38px;margin:0 0 14px}}h2{{margin-top:52px}}h3{{margin:28px 0 12px}}.lead{{color:#66716c;max-width:980px;line-height:1.8}}.metrics{{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid #cfd5d1;border-bottom:1px solid #cfd5d1;margin:30px 0}}.metric{{padding:22px 18px;border-right:1px solid #cfd5d1}}.metric:last-child{{border:0}}.metric b{{display:block;font-size:25px;color:#bb654f;margin-top:8px}}.chart{{background:#fbfaf6;margin:18px 0;padding:12px;border-radius:4px}}.steps{{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#d9ddd8;border:1px solid #d9ddd8}}.step{{background:#fbfaf6;padding:18px;line-height:1.65}}.step b{{display:block;color:#176b5b;margin-bottom:8px}}.callout{{border-left:4px solid #bb654f;background:#fbfaf6;padding:18px 22px;line-height:1.8}}table{{border-collapse:collapse;width:100%;font-size:12px;background:#fbfaf6}}th,td{{padding:8px;border-bottom:1px solid #d9ddd8;text-align:left;white-space:nowrap}}th{{background:#e8ece8;color:#176b5b;position:sticky;top:0}}.table-wrap{{overflow-x:auto;overflow-y:visible;border:1px solid #d9ddd8}}code{{color:#176b5b}}@media(max-width:800px){{.metrics,.steps{{grid-template-columns:1fr 1fr}}}}
 </style></head><body><main>
 <h1>10Y地方债策略：阈值调参实验</h1>
-<p class="lead">本报告是本次阈值研究的唯一说明文件。实验使用网页所选基线的九因子权重和多/中/空仓位，只检验定性分界、看空总分门槛和看空确认条件。资本利得BP按 -仓位 × YTM变化BP 计算，不乘久期。</p>
+<p class="lead">本报告是本次{frequency_name}阈值研究的唯一说明文件。实验使用网页所选基线的有效因子权重和多/中/空仓位，只检验定性分界、看空总分门槛和看空确认条件。资本利得BP按 -仓位 × YTM变化BP 计算，不乘久期。发飞因子当前停用；{'日频利差变化使用5个交易日差分。' if base_config.signal_frequency == 'daily' else '周频利差变化沿用周度看板口径。'}</p>
 <div class="metrics"><div class="metric">候选组合<b>{len(results)}</b></div><div class="metric">累计资本利得<b>{best['capital_gain_total_bp']:.2f} BP</b></div><div class="metric">资本利得超额<b>{best['capital_gain_excess_bp']:.2f} BP</b></div><div class="metric">逐笔胜率<b>{best['capital_trade_win_rate']:.2%}</b></div></div>
 <h2>实验设计</h2>
-<div class="steps"><div class="step"><b>1. 单模块敏感性</b>分位阈值测试15/85至35/65，利差变化按0.5BP生成候选。</div><div class="step"><b>2. 看空总分</b>测试15至40；多/中/空仓位沿用所选基线。</div><div class="step"><b>3. 确认规则</b>测试模块数量、供需确认和连续两周确认。</div><div class="step"><b>4. 有限交叉</b>只对最敏感的两个模块组合，避免全参数暴力过拟合。</div></div>
+<div class="steps"><div class="step"><b>1. 单模块敏感性</b>分位阈值测试15/85至35/65，利差变化按0.5BP生成候选。</div><div class="step"><b>2. 看空总分</b>测试15至40；多/中/空仓位沿用所选基线。</div><div class="step"><b>3. 确认规则</b>测试模块数量、供需确认和连续两{period_unit}确认。</div><div class="step"><b>4. 有限交叉</b>只对最敏感的两个模块组合，避免全参数暴力过拟合。</div></div>
 <h3>固定权重</h3><div class="table-wrap">{weights.to_html(index=False, escape=False)}</div>
 <h2>绩效对照</h2><div class="table-wrap">{comparison.to_html(index=False, escape=False)}</div>
-<h2>研究结论</h2><div class="callout"><strong>{threshold_conclusion}</strong> 当前看空规则为：总分低于 {best_config.positions.bearish_threshold:g}，至少 {best_config.positions.bearish_min_core_factors} 个核心模块利空，{'且必须包含供给或银行需求利空' if best_config.positions.bearish_require_supply_or_demand else '不额外要求供给或需求确认'}，连续确认 {best_config.positions.bearish_confirmation_periods} 周。</div>
+<h2>研究结论</h2><div class="callout"><strong>{threshold_conclusion}</strong> 当前看空规则为：总分低于 {best_config.positions.bearish_threshold:g}，至少 {best_config.positions.bearish_min_core_factors} 个核心模块利空，{'且必须包含供给或银行需求利空' if best_config.positions.bearish_require_supply_or_demand else '不额外要求供给或需求确认'}，连续确认 {best_config.positions.bearish_confirmation_periods} {period_unit}。</div>
 <h3>最佳参数与原始参数</h3><div class="table-wrap">{threshold_rows.to_html(index=False, escape=False)}</div>
-<p class="lead">最佳候选来源：<code>{best['stage']} / {best['module']} / {best['candidate_label']}</code>。本次目标函数为 {base_config.objective.capital_gain_bp_weight:g} × 累计资本利得BP + {base_config.objective.capital_gain_excess_bp_weight:g} × 资本利得超额BP + {base_config.objective.capital_trade_win_rate_weight:g} × 已平仓交易胜率 + {base_config.objective.capital_gain_drawdown_bp_penalty:g} × 资本利得回撤BP + {base_config.objective.total_return_weight:g} × 累计收益 + {base_config.objective.excess_return_weight:g} × 超额收益 + {base_config.objective.sharpe_weight:g} × 夏普 + {base_config.objective.max_drawdown_penalty:g} × 最大回撤 + {base_config.objective.signal_win_rate_weight:g} × 调仓周期胜率。</p>
+<p class="lead">最佳候选来源：<code>{best['stage']} / {best['module']} / {best['candidate_label']}</code>。本次目标函数为 {base_config.objective.capital_gain_bp_weight:g} × 累计资本利得BP + {base_config.objective.capital_gain_excess_bp_weight:g} × 资本利得超额BP + {base_config.objective.capital_trade_win_rate_weight:g} × 已平仓交易胜率 + {base_config.objective.capital_gain_avg_win_bp_weight:g} × 平均每笔盈利BP + {base_config.objective.capital_gain_drawdown_bp_penalty:g} × 资本利得回撤BP + {base_config.objective.total_return_weight:g} × 累计收益 + {base_config.objective.excess_return_weight:g} × 超额收益 + {base_config.objective.sharpe_weight:g} × 夏普 + {base_config.objective.signal_win_rate_weight:g} × 调仓周期胜率。</p>
 <h2>实际改变的调仓周期</h2><p class="lead">最佳方案相对原始阈值共有 {len(changed)} 个周期改变仓位。正改善代表新规则提高了该笔交易的资本利得BP。</p><div class="table-wrap">{changed.to_html(index=False, escape=False)}</div>
 <h2>单模块敏感性</h2><div class="table-wrap">{module_display.to_html(index=False, escape=False)}</div>
 {''.join(f'<div class="chart">{block}</div>' for block in chart_blocks)}

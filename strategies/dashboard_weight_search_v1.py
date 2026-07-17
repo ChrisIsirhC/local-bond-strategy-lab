@@ -22,19 +22,18 @@ def generate_weight_candidates() -> list[DashboardWeights]:
                         continue
                     for supply_amount, supply_ratio, supply_long in supply_splits:
                         for spread_gov, spread_change, spread_ncd in spread_splits:
-                            for fly_penalty in range(-30, 1, step):
-                                candidates.append(
-                                    DashboardWeights(
-                                        supply_amount=float(supply_amount),
-                                        supply_ratio=float(supply_ratio),
-                                        supply_long=float(supply_long),
-                                        fly_penalty=float(fly_penalty),
-                                        bank_demand=float(bank_demand),
-                                        spread_gov=float(spread_gov),
-                                        spread_change=float(spread_change),
-                                        spread_ncd=float(spread_ncd),
-                                        nonbank_sentiment=float(nonbank_sentiment),
-                                    )
+                            candidates.append(
+                                DashboardWeights(
+                                    supply_amount=float(supply_amount),
+                                    supply_ratio=float(supply_ratio),
+                                    supply_long=float(supply_long),
+                                    fly_penalty=0.0,
+                                    bank_demand=float(bank_demand),
+                                    spread_gov=float(spread_gov),
+                                    spread_change=float(spread_change),
+                                    spread_ncd=float(spread_ncd),
+                                    nonbank_sentiment=float(nonbank_sentiment),
                                 )
+                            )
 
     return candidates

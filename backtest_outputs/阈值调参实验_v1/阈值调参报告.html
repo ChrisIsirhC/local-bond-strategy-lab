@@ -4,8 +4,8 @@
 body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHei",sans-serif}main{max-width:1280px;margin:auto;padding:48px 28px 80px}h1{font-size:38px;margin:0 0 14px}h2{margin-top:52px}h3{margin:28px 0 12px}.lead{color:#66716c;max-width:980px;line-height:1.8}.metrics{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid #cfd5d1;border-bottom:1px solid #cfd5d1;margin:30px 0}.metric{padding:22px 18px;border-right:1px solid #cfd5d1}.metric:last-child{border:0}.metric b{display:block;font-size:25px;color:#bb654f;margin-top:8px}.chart{background:#fbfaf6;margin:18px 0;padding:12px;border-radius:4px}.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#d9ddd8;border:1px solid #d9ddd8}.step{background:#fbfaf6;padding:18px;line-height:1.65}.step b{display:block;color:#176b5b;margin-bottom:8px}.callout{border-left:4px solid #bb654f;background:#fbfaf6;padding:18px 22px;line-height:1.8}table{border-collapse:collapse;width:100%;font-size:12px;background:#fbfaf6}th,td{padding:8px;border-bottom:1px solid #d9ddd8;text-align:left;white-space:nowrap}th{background:#e8ece8;color:#176b5b;position:sticky;top:0}.table-wrap{overflow-x:auto;overflow-y:visible;border:1px solid #d9ddd8}code{color:#176b5b}@media(max-width:800px){.metrics,.steps{grid-template-columns:1fr 1fr}}
 </style></head><body><main>
 <h1>10Y地方债策略：阈值调参实验</h1>
-<p class="lead">本报告是本次阈值研究的唯一说明文件。实验使用网页所选基线的九因子权重和多/中/空仓位，只检验定性分界、看空总分门槛和看空确认条件。资本利得BP按 -仓位 × YTM变化BP 计算，不乘久期。</p>
-<div class="metrics"><div class="metric">候选组合<b>82</b></div><div class="metric">累计资本利得<b>102.46 BP</b></div><div class="metric">资本利得超额<b>-2.12 BP</b></div><div class="metric">逐笔胜率<b>74.29%</b></div></div>
+<p class="lead">本报告是本次周频阈值研究的唯一说明文件。实验使用网页所选基线的有效因子权重和多/中/空仓位，只检验定性分界、看空总分门槛和看空确认条件。资本利得BP按 -仓位 × YTM变化BP 计算，不乘久期。发飞因子当前停用；周频利差变化沿用周度看板口径。</p>
+<div class="metrics"><div class="metric">候选组合<b>82</b></div><div class="metric">累计资本利得<b>94.34 BP</b></div><div class="metric">资本利得超额<b>28.26 BP</b></div><div class="metric">逐笔胜率<b>100.00%</b></div></div>
 <h2>实验设计</h2>
 <div class="steps"><div class="step"><b>1. 单模块敏感性</b>分位阈值测试15/85至35/65，利差变化按0.5BP生成候选。</div><div class="step"><b>2. 看空总分</b>测试15至40；多/中/空仓位沿用所选基线。</div><div class="step"><b>3. 确认规则</b>测试模块数量、供需确认和连续两周确认。</div><div class="step"><b>4. 有限交叉</b>只对最敏感的两个模块组合，避免全参数暴力过拟合。</div></div>
 <h3>固定权重</h3><div class="table-wrap"><table border="1" class="dataframe">
@@ -22,7 +22,7 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
     </tr>
     <tr>
       <td>supply_ratio</td>
-      <td>20.0</td>
+      <td>5.0</td>
     </tr>
     <tr>
       <td>supply_long</td>
@@ -30,7 +30,7 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
     </tr>
     <tr>
       <td>fly_penalty</td>
-      <td>-20.0</td>
+      <td>0.0</td>
     </tr>
     <tr>
       <td>bank_demand</td>
@@ -38,19 +38,19 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
     </tr>
     <tr>
       <td>spread_gov</td>
-      <td>0.0</td>
+      <td>25.0</td>
     </tr>
     <tr>
       <td>spread_change</td>
-      <td>25.0</td>
+      <td>10.0</td>
     </tr>
     <tr>
       <td>spread_ncd</td>
-      <td>0.0</td>
+      <td>10.0</td>
     </tr>
     <tr>
       <td>nonbank_sentiment</td>
-      <td>25.0</td>
+      <td>20.0</td>
     </tr>
   </tbody>
 </table></div>
@@ -60,73 +60,73 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
       <th>指标</th>
       <th>原始阈值基线</th>
       <th>最佳方案</th>
-      <th>长期持有基准</th>
+      <th>条件基准</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td>累计资本利得</td>
-      <td>102.46 BP</td>
-      <td>102.46 BP</td>
-      <td>104.58 BP</td>
+      <td>88.59 BP</td>
+      <td>94.34 BP</td>
+      <td>66.09 BP</td>
     </tr>
     <tr>
       <td>资本利得交易胜率</td>
-      <td>74.29%</td>
-      <td>74.29%</td>
-      <td>暂无已平仓</td>
+      <td>100.00%</td>
+      <td>100.00%</td>
+      <td>83.33%</td>
     </tr>
     <tr>
-      <td>平均单笔资本利得</td>
-      <td>2.93 BP</td>
-      <td>2.93 BP</td>
-      <td>nan BP</td>
+      <td>平均每笔盈利</td>
+      <td>7.34 BP</td>
+      <td>7.10 BP</td>
+      <td>6.79 BP</td>
     </tr>
     <tr>
       <td>最差交易</td>
-      <td>-3.43 BP</td>
-      <td>-3.43 BP</td>
-      <td>nan BP</td>
+      <td>0.41 BP</td>
+      <td>0.11 BP</td>
+      <td>-3.80 BP</td>
     </tr>
     <tr>
       <td>资本利得最大回撤</td>
-      <td>-8.83 BP</td>
-      <td>-8.83 BP</td>
-      <td>-35.31 BP</td>
+      <td>-14.66 BP</td>
+      <td>-14.66 BP</td>
+      <td>-15.23 BP</td>
     </tr>
     <tr>
       <td>累计收益</td>
-      <td>12.22%</td>
-      <td>12.22%</td>
-      <td>20.83%</td>
+      <td>12.86%</td>
+      <td>13.46%</td>
+      <td>10.35%</td>
     </tr>
     <tr>
       <td>年化收益</td>
-      <td>2.71%</td>
-      <td>2.71%</td>
-      <td>4.49%</td>
+      <td>3.73%</td>
+      <td>3.89%</td>
+      <td>3.02%</td>
     </tr>
     <tr>
       <td>最大回撤</td>
-      <td>-0.74%</td>
-      <td>-0.74%</td>
-      <td>-2.53%</td>
+      <td>-1.17%</td>
+      <td>-1.17%</td>
+      <td>-1.31%</td>
     </tr>
     <tr>
       <td>夏普比率</td>
-      <td>1.281</td>
-      <td>1.281</td>
-      <td>1.249</td>
+      <td>1.916</td>
+      <td>2.072</td>
+      <td>1.211</td>
     </tr>
     <tr>
       <td>调仓周期胜率</td>
-      <td>20.91%</td>
-      <td>20.91%</td>
-      <td>65.45%</td>
+      <td>64.29%</td>
+      <td>64.88%</td>
+      <td>60.71%</td>
     </tr>
   </tbody>
 </table></div>
-<h2>研究结论</h2><div class="callout"><strong>定性阈值保留原始设置；样本内改善主要来自看空总分或确认规则。</strong> 当前看空规则为：总分低于 30，至少 0 个核心模块利空，不额外要求供给或需求确认，连续确认 1 周。</div>
+<h2>研究结论</h2><div class="callout"><strong>部分定性阈值在资本利得BP目标下发生变化，具体差异见下表。</strong> 当前看空规则为：总分低于 30，至少 0 个核心模块利空，不额外要求供给或需求确认，连续确认 1 周。</div>
 <h3>最佳参数与原始参数</h3><div class="table-wrap"><table border="1" class="dataframe">
   <thead>
     <tr style="text-align: right;">
@@ -138,8 +138,8 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
   <tbody>
     <tr>
       <td>供给分位</td>
-      <td>35/65</td>
-      <td>35/65</td>
+      <td>25/75</td>
+      <td>25/75</td>
     </tr>
     <tr>
       <td>银行需求分位</td>
@@ -148,18 +148,18 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
     </tr>
     <tr>
       <td>地方债-国债利差分位</td>
-      <td>25/75</td>
-      <td>25/75</td>
+      <td>20/80</td>
+      <td>15/85</td>
     </tr>
     <tr>
       <td>地方债-NCD利差分位</td>
       <td>25/75</td>
-      <td>25/75</td>
+      <td>35/65</td>
     </tr>
     <tr>
       <td>利差周变化</td>
-      <td>±1BP</td>
-      <td>±1BP</td>
+      <td>±2BP</td>
+      <td>±1.5BP</td>
     </tr>
     <tr>
       <td>看空总分</td>
@@ -183,8 +183,8 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
     </tr>
   </tbody>
 </table></div>
-<p class="lead">最佳候选来源：<code>基线 / 全部 / 阈值原始基线</code>。本次目标函数为 1.2 × 累计资本利得BP + 1 × 资本利得超额BP + 10 × 已平仓交易胜率 + 0 × 资本利得回撤BP + 0 × 累计收益 + 0 × 超额收益 + 0 × 夏普 + 0 × 最大回撤 + 0 × 调仓周期胜率。</p>
-<h2>实际改变的调仓周期</h2><p class="lead">最佳方案相对原始阈值共有 0 个周期改变仓位。正改善代表新规则提高了该笔交易的资本利得BP。</p><div class="table-wrap"><table border="1" class="dataframe">
+<p class="lead">最佳候选来源：<code>组合基线 / 全部 / 单模块最优阈值组合</code>。本次目标函数为 0.2 × 累计资本利得BP + 0.25 × 资本利得超额BP + 100 × 已平仓交易胜率 + 0 × 平均每笔盈利BP + 1 × 资本利得回撤BP + 0 × 累计收益 + 0 × 超额收益 + 0 × 夏普 + 0 × 调仓周期胜率。</p>
+<h2>实际改变的调仓周期</h2><p class="lead">最佳方案相对原始阈值共有 9 个周期改变仓位。正改善代表新规则提高了该笔交易的资本利得BP。</p><div class="table-wrap"><table border="1" class="dataframe">
   <thead>
     <tr style="text-align: right;">
       <th>信号日期</th>
@@ -203,6 +203,141 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
     </tr>
   </thead>
   <tbody>
+    <tr>
+      <td>2022-11-14</td>
+      <td>0.5</td>
+      <td>-2.86</td>
+      <td>-4.48</td>
+      <td>1.62</td>
+      <td>有效防守</td>
+      <td>0.0</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>其他</td>
+      <td>是</td>
+      <td>是</td>
+      <td>2.86</td>
+    </tr>
+    <tr>
+      <td>2025-05-12</td>
+      <td>1.0</td>
+      <td>-2.50</td>
+      <td>-4.42</td>
+      <td>1.92</td>
+      <td>其他</td>
+      <td>0.5</td>
+      <td>-1.25</td>
+      <td>0.96</td>
+      <td>有效防守</td>
+      <td>是</td>
+      <td>是</td>
+      <td>1.25</td>
+    </tr>
+    <tr>
+      <td>2023-08-07</td>
+      <td>0.5</td>
+      <td>1.19</td>
+      <td>0.44</td>
+      <td>0.75</td>
+      <td>有效进攻</td>
+      <td>1.0</td>
+      <td>2.37</td>
+      <td>1.49</td>
+      <td>有效进攻</td>
+      <td>是</td>
+      <td>否</td>
+      <td>1.19</td>
+    </tr>
+    <tr>
+      <td>2023-03-20</td>
+      <td>0.0</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>其他</td>
+      <td>0.5</td>
+      <td>0.70</td>
+      <td>1.07</td>
+      <td>有效防守</td>
+      <td>是</td>
+      <td>是</td>
+      <td>0.70</td>
+    </tr>
+    <tr>
+      <td>2025-09-01</td>
+      <td>0.5</td>
+      <td>0.24</td>
+      <td>0.60</td>
+      <td>-0.36</td>
+      <td>低仓少吃</td>
+      <td>1.0</td>
+      <td>0.48</td>
+      <td>-0.71</td>
+      <td>有效进攻</td>
+      <td>是</td>
+      <td>是</td>
+      <td>0.24</td>
+    </tr>
+    <tr>
+      <td>2026-06-15</td>
+      <td>0.5</td>
+      <td>-0.01</td>
+      <td>0.64</td>
+      <td>-0.64</td>
+      <td>低仓少吃</td>
+      <td>0.0</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>其他</td>
+      <td>是</td>
+      <td>是</td>
+      <td>0.01</td>
+    </tr>
+    <tr>
+      <td>2025-12-15</td>
+      <td>1.0</td>
+      <td>0.47</td>
+      <td>0.88</td>
+      <td>-0.41</td>
+      <td>有效进攻</td>
+      <td>0.5</td>
+      <td>0.23</td>
+      <td>-0.20</td>
+      <td>低仓少吃</td>
+      <td>是</td>
+      <td>是</td>
+      <td>-0.23</td>
+    </tr>
+    <tr>
+      <td>2022-09-12</td>
+      <td>0.5</td>
+      <td>-0.25</td>
+      <td>-1.90</td>
+      <td>1.65</td>
+      <td>有效防守</td>
+      <td>1.0</td>
+      <td>-0.49</td>
+      <td>3.31</td>
+      <td>其他</td>
+      <td>是</td>
+      <td>是</td>
+      <td>-0.25</td>
+    </tr>
+    <tr>
+      <td>2025-08-18</td>
+      <td>0.0</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>其他</td>
+      <td>0.5</td>
+      <td>-5.30</td>
+      <td>-3.53</td>
+      <td>该空没空</td>
+      <td>是</td>
+      <td>是</td>
+      <td>-5.30</td>
+    </tr>
   </tbody>
 </table></div>
 <h2>单模块敏感性</h2><div class="table-wrap"><table border="1" class="dataframe">
@@ -225,79 +360,79 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
   </thead>
   <tbody>
     <tr>
-      <td>利差周变化阈值</td>
-      <td>±1BP</td>
-      <td>保留原始阈值</td>
-      <td>128.2606</td>
-      <td>12.22%</td>
-      <td>-8.61%</td>
-      <td>102.46</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
-      <td>0.0000</td>
-      <td>50.0816</td>
-      <td>2.47%</td>
-      <td>22.73</td>
+      <td>地方债国债利差阈值</td>
+      <td>15/85</td>
+      <td>采用候选阈值</td>
+      <td>109.9103</td>
+      <td>12.97%</td>
+      <td>2.92%</td>
+      <td>89.84</td>
+      <td>26.41</td>
+      <td>100.00%</td>
+      <td>0.0100</td>
+      <td>25.4491</td>
+      <td>0.70%</td>
+      <td>6.00</td>
     </tr>
     <tr>
       <td>供给分位阈值</td>
-      <td>35/65</td>
+      <td>25/75</td>
       <td>保留原始阈值</td>
-      <td>128.2606</td>
-      <td>12.22%</td>
-      <td>-8.61%</td>
-      <td>102.46</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
+      <td>109.9003</td>
+      <td>12.86%</td>
+      <td>3.02%</td>
+      <td>88.59</td>
+      <td>27.37</td>
+      <td>100.00%</td>
       <td>0.0000</td>
-      <td>45.5015</td>
-      <td>2.24%</td>
-      <td>20.50</td>
+      <td>23.0223</td>
+      <td>0.66%</td>
+      <td>5.03</td>
+    </tr>
+    <tr>
+      <td>利差周变化阈值</td>
+      <td>±1.5BP</td>
+      <td>采用候选阈值</td>
+      <td>110.2650</td>
+      <td>12.86%</td>
+      <td>3.18%</td>
+      <td>88.35</td>
+      <td>29.02</td>
+      <td>100.00%</td>
+      <td>0.3647</td>
+      <td>16.7941</td>
+      <td>0.27%</td>
+      <td>3.01</td>
     </tr>
     <tr>
       <td>银行需求分位阈值</td>
       <td>25/75</td>
       <td>保留原始阈值</td>
-      <td>128.2606</td>
-      <td>12.22%</td>
-      <td>-8.61%</td>
-      <td>102.46</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
+      <td>109.9003</td>
+      <td>12.86%</td>
+      <td>3.02%</td>
+      <td>88.59</td>
+      <td>27.37</td>
+      <td>100.00%</td>
       <td>0.0000</td>
-      <td>13.9040</td>
-      <td>0.69%</td>
-      <td>6.32</td>
+      <td>8.4791</td>
+      <td>0.19%</td>
+      <td>1.55</td>
     </tr>
     <tr>
       <td>地方债NCD利差阈值</td>
-      <td>25/75</td>
-      <td>保留原始阈值</td>
-      <td>128.2606</td>
-      <td>12.22%</td>
-      <td>-8.61%</td>
-      <td>102.46</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
-      <td>0.0000</td>
-      <td>0.0000</td>
-      <td>0.00%</td>
-      <td>0.00</td>
-    </tr>
-    <tr>
-      <td>地方债国债利差阈值</td>
-      <td>25/75</td>
-      <td>保留原始阈值</td>
-      <td>128.2606</td>
-      <td>12.22%</td>
-      <td>-8.61%</td>
-      <td>102.46</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
-      <td>0.0000</td>
-      <td>0.0000</td>
-      <td>0.00%</td>
-      <td>0.00</td>
+      <td>35/65</td>
+      <td>采用候选阈值</td>
+      <td>110.4905</td>
+      <td>13.25%</td>
+      <td>2.94%</td>
+      <td>92.64</td>
+      <td>26.49</td>
+      <td>100.00%</td>
+      <td>0.5903</td>
+      <td>8.2966</td>
+      <td>0.39%</td>
+      <td>4.05</td>
     </tr>
   </tbody>
 </table></div>
@@ -311,11 +446,11 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
     
 </head>
 <body >
-    <div id="c1d3e5504ae24c268f05d095887f1fa1" class="chart-container" style="width:100%; height:390px; "></div>
+    <div id="e038824aeeee428db643e124712f6dfc" class="chart-container" style="width:100%; height:390px; "></div>
     <script>
-        var chart_c1d3e5504ae24c268f05d095887f1fa1 = echarts.init(
-            document.getElementById('c1d3e5504ae24c268f05d095887f1fa1'), 'white', {renderer: 'canvas'});
-        var option_c1d3e5504ae24c268f05d095887f1fa1 = {
+        var chart_e038824aeeee428db643e124712f6dfc = echarts.init(
+            document.getElementById('e038824aeeee428db643e124712f6dfc'), 'white', {renderer: 'canvas'});
+        var option_e038824aeeee428db643e124712f6dfc = {
     "animation": true,
     "animationThreshold": 2000,
     "animationDuration": 1000,
@@ -355,23 +490,23 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
             "data": [
                 [
                     "15/85",
-                    81.96
+                    89.13
                 ],
                 [
                     "20/80",
-                    91.7
+                    89.13
                 ],
                 [
                     "25/75",
-                    97.31
+                    88.595
                 ],
                 [
                     "30/70",
-                    98.86
+                    88.595
                 ],
                 [
                     "35/65",
-                    102.46
+                    92.64
                 ]
             ],
             "hoverAnimation": true,
@@ -409,899 +544,23 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
             "data": [
                 [
                     "15/85",
-                    -22.62
+                    29.445
                 ],
                 [
                     "20/80",
-                    -12.88
+                    29.445
                 ],
                 [
                     "25/75",
-                    -7.27
+                    27.365
                 ],
                 [
                     "30/70",
-                    -5.72
+                    27.365
                 ],
                 [
                     "35/65",
-                    -2.12
-                ]
-            ],
-            "hoverAnimation": true,
-            "label": {
-                "show": true,
-                "margin": 8,
-                "valueAnimation": false
-            },
-            "logBase": 10,
-            "seriesLayoutBy": "column",
-            "lineStyle": {
-                "show": true,
-                "width": 1,
-                "opacity": 1,
-                "curveness": 0,
-                "type": "solid"
-            },
-            "areaStyle": {
-                "opacity": 0
-            },
-            "zlevel": 0,
-            "z": 0
-        }
-    ],
-    "legend": [
-        {
-            "data": [
-                "\u7d2f\u8ba1\u8d44\u672c\u5229\u5f97",
-                "\u8d44\u672c\u5229\u5f97\u8d85\u989d"
-            ],
-            "selected": {},
-            "show": true,
-            "padding": 5,
-            "itemGap": 10,
-            "itemWidth": 25,
-            "itemHeight": 14,
-            "backgroundColor": "transparent",
-            "borderColor": "#ccc",
-            "borderRadius": 0,
-            "pageButtonItemGap": 5,
-            "pageButtonPosition": "end",
-            "pageFormatter": "{current}/{total}",
-            "pageIconColor": "#2f4554",
-            "pageIconInactiveColor": "#aaa",
-            "pageIconSize": 15,
-            "animationDurationUpdate": 800,
-            "selector": false,
-            "selectorPosition": "auto",
-            "selectorItemGap": 7,
-            "selectorButtonGap": 10
-        }
-    ],
-    "tooltip": {
-        "show": true,
-        "trigger": "axis",
-        "triggerOn": "mousemove|click",
-        "axisPointer": {
-            "type": "line"
-        },
-        "showContent": true,
-        "alwaysShowContent": false,
-        "showDelay": 0,
-        "hideDelay": 100,
-        "enterable": false,
-        "confine": false,
-        "appendToBody": false,
-        "transitionDuration": 0.4,
-        "textStyle": {
-            "fontSize": 14
-        },
-        "borderWidth": 0,
-        "padding": 5,
-        "order": "seriesAsc"
-    },
-    "xAxis": [
-        {
-            "type": "category",
-            "show": true,
-            "scale": false,
-            "nameLocation": "end",
-            "nameGap": 15,
-            "gridIndex": 0,
-            "inverse": false,
-            "offset": 0,
-            "splitNumber": 5,
-            "minInterval": 0,
-            "splitLine": {
-                "show": true,
-                "lineStyle": {
-                    "show": true,
-                    "width": 1,
-                    "opacity": 1,
-                    "curveness": 0,
-                    "type": "solid"
-                }
-            },
-            "animation": true,
-            "animationThreshold": 2000,
-            "animationDuration": 1000,
-            "animationEasing": "cubicOut",
-            "animationDelay": 0,
-            "animationDurationUpdate": 300,
-            "animationEasingUpdate": "cubicOut",
-            "animationDelayUpdate": 0,
-            "data": [
-                "15/85",
-                "20/80",
-                "25/75",
-                "30/70",
-                "35/65"
-            ]
-        }
-    ],
-    "yAxis": [
-        {
-            "type": "value",
-            "name": "\u8d44\u672c\u5229\u5f97\uff08BP\uff09",
-            "show": true,
-            "scale": true,
-            "nameLocation": "end",
-            "nameGap": 15,
-            "gridIndex": 0,
-            "inverse": false,
-            "offset": 0,
-            "splitNumber": 5,
-            "minInterval": 0,
-            "splitLine": {
-                "show": true,
-                "lineStyle": {
-                    "show": true,
-                    "width": 1,
-                    "opacity": 1,
-                    "curveness": 0,
-                    "type": "solid"
-                }
-            },
-            "animation": true,
-            "animationThreshold": 2000,
-            "animationDuration": 1000,
-            "animationEasing": "cubicOut",
-            "animationDelay": 0,
-            "animationDurationUpdate": 300,
-            "animationEasingUpdate": "cubicOut",
-            "animationDelayUpdate": 0
-        }
-    ],
-    "title": [
-        {
-            "show": true,
-            "text": "\u4f9b\u7ed9\u5206\u4f4d\u9608\u503c",
-            "target": "blank",
-            "subtarget": "blank",
-            "padding": 5,
-            "itemGap": 10,
-            "textAlign": "auto",
-            "textVerticalAlign": "auto",
-            "triggerEvent": false
-        }
-    ]
-};
-        chart_c1d3e5504ae24c268f05d095887f1fa1.setOption(option_c1d3e5504ae24c268f05d095887f1fa1);
-            window.addEventListener('resize', function(){
-                chart_c1d3e5504ae24c268f05d095887f1fa1.resize();
-            })
-    </script>
-</body>
-</html>
-</div><div class="chart"><!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Awesome-pyecharts</title>
-                <script type="text/javascript" src="https://assets.pyecharts.org/assets/v5/echarts.min.js"></script>
-
-    
-</head>
-<body >
-    <div id="8863d617845f4ea48ae55910d6d517e2" class="chart-container" style="width:100%; height:390px; "></div>
-    <script>
-        var chart_8863d617845f4ea48ae55910d6d517e2 = echarts.init(
-            document.getElementById('8863d617845f4ea48ae55910d6d517e2'), 'white', {renderer: 'canvas'});
-        var option_8863d617845f4ea48ae55910d6d517e2 = {
-    "animation": true,
-    "animationThreshold": 2000,
-    "animationDuration": 1000,
-    "animationEasing": "cubicOut",
-    "animationDelay": 0,
-    "animationDurationUpdate": 300,
-    "animationEasingUpdate": "cubicOut",
-    "animationDelayUpdate": 0,
-    "aria": {
-        "enabled": false
-    },
-    "color": [
-        "#bb654f",
-        "#176b5b",
-        "#5470c6",
-        "#91cc75",
-        "#fac858",
-        "#ee6666",
-        "#73c0de",
-        "#3ba272",
-        "#fc8452",
-        "#9a60b4",
-        "#ea7ccc"
-    ],
-    "series": [
-        {
-            "type": "line",
-            "name": "\u7d2f\u8ba1\u8d44\u672c\u5229\u5f97",
-            "connectNulls": false,
-            "xAxisIndex": 0,
-            "symbolSize": 4,
-            "showSymbol": true,
-            "smooth": false,
-            "clip": true,
-            "step": false,
-            "stackStrategy": "samesign",
-            "data": [
-                [
-                    "15/85",
-                    100.63
-                ],
-                [
-                    "20/80",
-                    100.72
-                ],
-                [
-                    "25/75",
-                    102.46
-                ],
-                [
-                    "30/70",
-                    99.96
-                ],
-                [
-                    "35/65",
-                    96.14
-                ]
-            ],
-            "hoverAnimation": true,
-            "label": {
-                "show": true,
-                "margin": 8,
-                "valueAnimation": false
-            },
-            "logBase": 10,
-            "seriesLayoutBy": "column",
-            "lineStyle": {
-                "show": true,
-                "width": 1,
-                "opacity": 1,
-                "curveness": 0,
-                "type": "solid"
-            },
-            "areaStyle": {
-                "opacity": 0
-            },
-            "zlevel": 0,
-            "z": 0
-        },
-        {
-            "type": "line",
-            "name": "\u8d44\u672c\u5229\u5f97\u8d85\u989d",
-            "connectNulls": false,
-            "xAxisIndex": 0,
-            "symbolSize": 4,
-            "showSymbol": true,
-            "smooth": false,
-            "clip": true,
-            "step": false,
-            "stackStrategy": "samesign",
-            "data": [
-                [
-                    "15/85",
-                    -3.95
-                ],
-                [
-                    "20/80",
-                    -3.86
-                ],
-                [
-                    "25/75",
-                    -2.12
-                ],
-                [
-                    "30/70",
-                    -4.62
-                ],
-                [
-                    "35/65",
-                    -8.44
-                ]
-            ],
-            "hoverAnimation": true,
-            "label": {
-                "show": true,
-                "margin": 8,
-                "valueAnimation": false
-            },
-            "logBase": 10,
-            "seriesLayoutBy": "column",
-            "lineStyle": {
-                "show": true,
-                "width": 1,
-                "opacity": 1,
-                "curveness": 0,
-                "type": "solid"
-            },
-            "areaStyle": {
-                "opacity": 0
-            },
-            "zlevel": 0,
-            "z": 0
-        }
-    ],
-    "legend": [
-        {
-            "data": [
-                "\u7d2f\u8ba1\u8d44\u672c\u5229\u5f97",
-                "\u8d44\u672c\u5229\u5f97\u8d85\u989d"
-            ],
-            "selected": {},
-            "show": true,
-            "padding": 5,
-            "itemGap": 10,
-            "itemWidth": 25,
-            "itemHeight": 14,
-            "backgroundColor": "transparent",
-            "borderColor": "#ccc",
-            "borderRadius": 0,
-            "pageButtonItemGap": 5,
-            "pageButtonPosition": "end",
-            "pageFormatter": "{current}/{total}",
-            "pageIconColor": "#2f4554",
-            "pageIconInactiveColor": "#aaa",
-            "pageIconSize": 15,
-            "animationDurationUpdate": 800,
-            "selector": false,
-            "selectorPosition": "auto",
-            "selectorItemGap": 7,
-            "selectorButtonGap": 10
-        }
-    ],
-    "tooltip": {
-        "show": true,
-        "trigger": "axis",
-        "triggerOn": "mousemove|click",
-        "axisPointer": {
-            "type": "line"
-        },
-        "showContent": true,
-        "alwaysShowContent": false,
-        "showDelay": 0,
-        "hideDelay": 100,
-        "enterable": false,
-        "confine": false,
-        "appendToBody": false,
-        "transitionDuration": 0.4,
-        "textStyle": {
-            "fontSize": 14
-        },
-        "borderWidth": 0,
-        "padding": 5,
-        "order": "seriesAsc"
-    },
-    "xAxis": [
-        {
-            "type": "category",
-            "show": true,
-            "scale": false,
-            "nameLocation": "end",
-            "nameGap": 15,
-            "gridIndex": 0,
-            "inverse": false,
-            "offset": 0,
-            "splitNumber": 5,
-            "minInterval": 0,
-            "splitLine": {
-                "show": true,
-                "lineStyle": {
-                    "show": true,
-                    "width": 1,
-                    "opacity": 1,
-                    "curveness": 0,
-                    "type": "solid"
-                }
-            },
-            "animation": true,
-            "animationThreshold": 2000,
-            "animationDuration": 1000,
-            "animationEasing": "cubicOut",
-            "animationDelay": 0,
-            "animationDurationUpdate": 300,
-            "animationEasingUpdate": "cubicOut",
-            "animationDelayUpdate": 0,
-            "data": [
-                "15/85",
-                "20/80",
-                "25/75",
-                "30/70",
-                "35/65"
-            ]
-        }
-    ],
-    "yAxis": [
-        {
-            "type": "value",
-            "name": "\u8d44\u672c\u5229\u5f97\uff08BP\uff09",
-            "show": true,
-            "scale": true,
-            "nameLocation": "end",
-            "nameGap": 15,
-            "gridIndex": 0,
-            "inverse": false,
-            "offset": 0,
-            "splitNumber": 5,
-            "minInterval": 0,
-            "splitLine": {
-                "show": true,
-                "lineStyle": {
-                    "show": true,
-                    "width": 1,
-                    "opacity": 1,
-                    "curveness": 0,
-                    "type": "solid"
-                }
-            },
-            "animation": true,
-            "animationThreshold": 2000,
-            "animationDuration": 1000,
-            "animationEasing": "cubicOut",
-            "animationDelay": 0,
-            "animationDurationUpdate": 300,
-            "animationEasingUpdate": "cubicOut",
-            "animationDelayUpdate": 0
-        }
-    ],
-    "title": [
-        {
-            "show": true,
-            "text": "\u94f6\u884c\u9700\u6c42\u5206\u4f4d\u9608\u503c",
-            "target": "blank",
-            "subtarget": "blank",
-            "padding": 5,
-            "itemGap": 10,
-            "textAlign": "auto",
-            "textVerticalAlign": "auto",
-            "triggerEvent": false
-        }
-    ]
-};
-        chart_8863d617845f4ea48ae55910d6d517e2.setOption(option_8863d617845f4ea48ae55910d6d517e2);
-            window.addEventListener('resize', function(){
-                chart_8863d617845f4ea48ae55910d6d517e2.resize();
-            })
-    </script>
-</body>
-</html>
-</div><div class="chart"><!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Awesome-pyecharts</title>
-                <script type="text/javascript" src="https://assets.pyecharts.org/assets/v5/echarts.min.js"></script>
-
-    
-</head>
-<body >
-    <div id="b6f7b96819b149b29cb1789cef09e182" class="chart-container" style="width:100%; height:390px; "></div>
-    <script>
-        var chart_b6f7b96819b149b29cb1789cef09e182 = echarts.init(
-            document.getElementById('b6f7b96819b149b29cb1789cef09e182'), 'white', {renderer: 'canvas'});
-        var option_b6f7b96819b149b29cb1789cef09e182 = {
-    "animation": true,
-    "animationThreshold": 2000,
-    "animationDuration": 1000,
-    "animationEasing": "cubicOut",
-    "animationDelay": 0,
-    "animationDurationUpdate": 300,
-    "animationEasingUpdate": "cubicOut",
-    "animationDelayUpdate": 0,
-    "aria": {
-        "enabled": false
-    },
-    "color": [
-        "#bb654f",
-        "#176b5b",
-        "#5470c6",
-        "#91cc75",
-        "#fac858",
-        "#ee6666",
-        "#73c0de",
-        "#3ba272",
-        "#fc8452",
-        "#9a60b4",
-        "#ea7ccc"
-    ],
-    "series": [
-        {
-            "type": "line",
-            "name": "\u7d2f\u8ba1\u8d44\u672c\u5229\u5f97",
-            "connectNulls": false,
-            "xAxisIndex": 0,
-            "symbolSize": 4,
-            "showSymbol": true,
-            "smooth": false,
-            "clip": true,
-            "step": false,
-            "stackStrategy": "samesign",
-            "data": [
-                [
-                    "15/85",
-                    102.46
-                ],
-                [
-                    "20/80",
-                    102.46
-                ],
-                [
-                    "25/75",
-                    102.46
-                ],
-                [
-                    "30/70",
-                    102.46
-                ],
-                [
-                    "35/65",
-                    102.46
-                ]
-            ],
-            "hoverAnimation": true,
-            "label": {
-                "show": true,
-                "margin": 8,
-                "valueAnimation": false
-            },
-            "logBase": 10,
-            "seriesLayoutBy": "column",
-            "lineStyle": {
-                "show": true,
-                "width": 1,
-                "opacity": 1,
-                "curveness": 0,
-                "type": "solid"
-            },
-            "areaStyle": {
-                "opacity": 0
-            },
-            "zlevel": 0,
-            "z": 0
-        },
-        {
-            "type": "line",
-            "name": "\u8d44\u672c\u5229\u5f97\u8d85\u989d",
-            "connectNulls": false,
-            "xAxisIndex": 0,
-            "symbolSize": 4,
-            "showSymbol": true,
-            "smooth": false,
-            "clip": true,
-            "step": false,
-            "stackStrategy": "samesign",
-            "data": [
-                [
-                    "15/85",
-                    -2.12
-                ],
-                [
-                    "20/80",
-                    -2.12
-                ],
-                [
-                    "25/75",
-                    -2.12
-                ],
-                [
-                    "30/70",
-                    -2.12
-                ],
-                [
-                    "35/65",
-                    -2.12
-                ]
-            ],
-            "hoverAnimation": true,
-            "label": {
-                "show": true,
-                "margin": 8,
-                "valueAnimation": false
-            },
-            "logBase": 10,
-            "seriesLayoutBy": "column",
-            "lineStyle": {
-                "show": true,
-                "width": 1,
-                "opacity": 1,
-                "curveness": 0,
-                "type": "solid"
-            },
-            "areaStyle": {
-                "opacity": 0
-            },
-            "zlevel": 0,
-            "z": 0
-        }
-    ],
-    "legend": [
-        {
-            "data": [
-                "\u7d2f\u8ba1\u8d44\u672c\u5229\u5f97",
-                "\u8d44\u672c\u5229\u5f97\u8d85\u989d"
-            ],
-            "selected": {},
-            "show": true,
-            "padding": 5,
-            "itemGap": 10,
-            "itemWidth": 25,
-            "itemHeight": 14,
-            "backgroundColor": "transparent",
-            "borderColor": "#ccc",
-            "borderRadius": 0,
-            "pageButtonItemGap": 5,
-            "pageButtonPosition": "end",
-            "pageFormatter": "{current}/{total}",
-            "pageIconColor": "#2f4554",
-            "pageIconInactiveColor": "#aaa",
-            "pageIconSize": 15,
-            "animationDurationUpdate": 800,
-            "selector": false,
-            "selectorPosition": "auto",
-            "selectorItemGap": 7,
-            "selectorButtonGap": 10
-        }
-    ],
-    "tooltip": {
-        "show": true,
-        "trigger": "axis",
-        "triggerOn": "mousemove|click",
-        "axisPointer": {
-            "type": "line"
-        },
-        "showContent": true,
-        "alwaysShowContent": false,
-        "showDelay": 0,
-        "hideDelay": 100,
-        "enterable": false,
-        "confine": false,
-        "appendToBody": false,
-        "transitionDuration": 0.4,
-        "textStyle": {
-            "fontSize": 14
-        },
-        "borderWidth": 0,
-        "padding": 5,
-        "order": "seriesAsc"
-    },
-    "xAxis": [
-        {
-            "type": "category",
-            "show": true,
-            "scale": false,
-            "nameLocation": "end",
-            "nameGap": 15,
-            "gridIndex": 0,
-            "inverse": false,
-            "offset": 0,
-            "splitNumber": 5,
-            "minInterval": 0,
-            "splitLine": {
-                "show": true,
-                "lineStyle": {
-                    "show": true,
-                    "width": 1,
-                    "opacity": 1,
-                    "curveness": 0,
-                    "type": "solid"
-                }
-            },
-            "animation": true,
-            "animationThreshold": 2000,
-            "animationDuration": 1000,
-            "animationEasing": "cubicOut",
-            "animationDelay": 0,
-            "animationDurationUpdate": 300,
-            "animationEasingUpdate": "cubicOut",
-            "animationDelayUpdate": 0,
-            "data": [
-                "15/85",
-                "20/80",
-                "25/75",
-                "30/70",
-                "35/65"
-            ]
-        }
-    ],
-    "yAxis": [
-        {
-            "type": "value",
-            "name": "\u8d44\u672c\u5229\u5f97\uff08BP\uff09",
-            "show": true,
-            "scale": true,
-            "nameLocation": "end",
-            "nameGap": 15,
-            "gridIndex": 0,
-            "inverse": false,
-            "offset": 0,
-            "splitNumber": 5,
-            "minInterval": 0,
-            "splitLine": {
-                "show": true,
-                "lineStyle": {
-                    "show": true,
-                    "width": 1,
-                    "opacity": 1,
-                    "curveness": 0,
-                    "type": "solid"
-                }
-            },
-            "animation": true,
-            "animationThreshold": 2000,
-            "animationDuration": 1000,
-            "animationEasing": "cubicOut",
-            "animationDelay": 0,
-            "animationDurationUpdate": 300,
-            "animationEasingUpdate": "cubicOut",
-            "animationDelayUpdate": 0
-        }
-    ],
-    "title": [
-        {
-            "show": true,
-            "text": "\u5730\u65b9\u503a\u56fd\u503a\u5229\u5dee\u9608\u503c",
-            "target": "blank",
-            "subtarget": "blank",
-            "padding": 5,
-            "itemGap": 10,
-            "textAlign": "auto",
-            "textVerticalAlign": "auto",
-            "triggerEvent": false
-        }
-    ]
-};
-        chart_b6f7b96819b149b29cb1789cef09e182.setOption(option_b6f7b96819b149b29cb1789cef09e182);
-            window.addEventListener('resize', function(){
-                chart_b6f7b96819b149b29cb1789cef09e182.resize();
-            })
-    </script>
-</body>
-</html>
-</div><div class="chart"><!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Awesome-pyecharts</title>
-                <script type="text/javascript" src="https://assets.pyecharts.org/assets/v5/echarts.min.js"></script>
-
-    
-</head>
-<body >
-    <div id="dcff355bd0f8453f8649673de85fd74a" class="chart-container" style="width:100%; height:390px; "></div>
-    <script>
-        var chart_dcff355bd0f8453f8649673de85fd74a = echarts.init(
-            document.getElementById('dcff355bd0f8453f8649673de85fd74a'), 'white', {renderer: 'canvas'});
-        var option_dcff355bd0f8453f8649673de85fd74a = {
-    "animation": true,
-    "animationThreshold": 2000,
-    "animationDuration": 1000,
-    "animationEasing": "cubicOut",
-    "animationDelay": 0,
-    "animationDurationUpdate": 300,
-    "animationEasingUpdate": "cubicOut",
-    "animationDelayUpdate": 0,
-    "aria": {
-        "enabled": false
-    },
-    "color": [
-        "#bb654f",
-        "#176b5b",
-        "#5470c6",
-        "#91cc75",
-        "#fac858",
-        "#ee6666",
-        "#73c0de",
-        "#3ba272",
-        "#fc8452",
-        "#9a60b4",
-        "#ea7ccc"
-    ],
-    "series": [
-        {
-            "type": "line",
-            "name": "\u7d2f\u8ba1\u8d44\u672c\u5229\u5f97",
-            "connectNulls": false,
-            "xAxisIndex": 0,
-            "symbolSize": 4,
-            "showSymbol": true,
-            "smooth": false,
-            "clip": true,
-            "step": false,
-            "stackStrategy": "samesign",
-            "data": [
-                [
-                    "15/85",
-                    102.46
-                ],
-                [
-                    "20/80",
-                    102.46
-                ],
-                [
-                    "25/75",
-                    102.46
-                ],
-                [
-                    "30/70",
-                    102.46
-                ],
-                [
-                    "35/65",
-                    102.46
-                ]
-            ],
-            "hoverAnimation": true,
-            "label": {
-                "show": true,
-                "margin": 8,
-                "valueAnimation": false
-            },
-            "logBase": 10,
-            "seriesLayoutBy": "column",
-            "lineStyle": {
-                "show": true,
-                "width": 1,
-                "opacity": 1,
-                "curveness": 0,
-                "type": "solid"
-            },
-            "areaStyle": {
-                "opacity": 0
-            },
-            "zlevel": 0,
-            "z": 0
-        },
-        {
-            "type": "line",
-            "name": "\u8d44\u672c\u5229\u5f97\u8d85\u989d",
-            "connectNulls": false,
-            "xAxisIndex": 0,
-            "symbolSize": 4,
-            "showSymbol": true,
-            "smooth": false,
-            "clip": true,
-            "step": false,
-            "stackStrategy": "samesign",
-            "data": [
-                [
-                    "15/85",
-                    -2.12
-                ],
-                [
-                    "20/80",
-                    -2.12
-                ],
-                [
-                    "25/75",
-                    -2.12
-                ],
-                [
-                    "30/70",
-                    -2.12
-                ],
-                [
-                    "35/65",
-                    -2.12
+                    26.49
                 ]
             ],
             "hoverAnimation": true,
@@ -1462,12 +721,323 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
         }
     ]
 };
-        chart_dcff355bd0f8453f8649673de85fd74a.setOption(option_dcff355bd0f8453f8649673de85fd74a);
+        chart_e038824aeeee428db643e124712f6dfc.setOption(option_e038824aeeee428db643e124712f6dfc);
             window.addEventListener('resize', function(){
-                chart_dcff355bd0f8453f8649673de85fd74a.resize();
+                chart_e038824aeeee428db643e124712f6dfc.resize();
             })
     </script>
-</body>
+<section class='section'><h2>样本内外检验</h2><p>候选参数只按搜索期目标函数排序；样本外、2026年以来和全区间结果均不参与参数选择。</p><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>区间</th>
+      <th>起始日期</th>
+      <th>结束日期</th>
+      <th>累计资本利得_BP</th>
+      <th>年化资本利得_BP</th>
+      <th>条件基准资本利得_BP</th>
+      <th>资本利得超额_BP</th>
+      <th>年化资本利得超额_BP</th>
+      <th>已平仓胜率</th>
+      <th>已平仓交易数</th>
+      <th>平均单笔_BP</th>
+      <th>平均亏损_BP</th>
+      <th>资本利得最大回撤_BP</th>
+      <th>平均持有交易日</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>搜索期</td>
+      <td>2022-01-17</td>
+      <td>2025-06-30</td>
+      <td>94.345</td>
+      <td>28.541345</td>
+      <td>66.09</td>
+      <td>28.255</td>
+      <td>8.547731</td>
+      <td>1.0</td>
+      <td>12</td>
+      <td>7.099167</td>
+      <td>None</td>
+      <td>-14.660</td>
+      <td>57.692308</td>
+    </tr>
+    <tr>
+      <td>样本外</td>
+      <td>2025-07-01</td>
+      <td>2026-07-14</td>
+      <td>2.655</td>
+      <td>2.665578</td>
+      <td>-2.33</td>
+      <td>4.985</td>
+      <td>5.004861</td>
+      <td>1.0</td>
+      <td>2</td>
+      <td>1.087500</td>
+      <td>None</td>
+      <td>-12.885</td>
+      <td>81.000000</td>
+    </tr>
+    <tr>
+      <td>2026年以来</td>
+      <td>2026-01-01</td>
+      <td>2026-07-14</td>
+      <td>11.705</td>
+      <td>23.597280</td>
+      <td>2.73</td>
+      <td>8.975</td>
+      <td>18.093600</td>
+      <td>1.0</td>
+      <td>1</td>
+      <td>11.225000</td>
+      <td>None</td>
+      <td>-3.735</td>
+      <td>61.000000</td>
+    </tr>
+    <tr>
+      <td>全区间</td>
+      <td>2022-01-17</td>
+      <td>2026-07-14</td>
+      <td>96.875</td>
+      <td>22.500000</td>
+      <td>63.94</td>
+      <td>32.935</td>
+      <td>7.649419</td>
+      <td>1.0</td>
+      <td>14</td>
+      <td>6.885357</td>
+      <td>None</td>
+      <td>-14.660</td>
+      <td>66.200000</td>
+    </tr>
+  </tbody>
+</table><h2>Top候选稳定性</h2><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>指标</th>
+      <th>数值</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>年化资本利得衰减_BP</td>
+      <td>-25.875767</td>
+    </tr>
+    <tr>
+      <td>年化超额衰减_BP</td>
+      <td>-3.542871</td>
+    </tr>
+    <tr>
+      <td>样本外年化保留率</td>
+      <td>0.093394</td>
+    </tr>
+    <tr>
+      <td>样本外胜率变化</td>
+      <td>0.000000</td>
+    </tr>
+    <tr>
+      <td>样本外回撤变化_BP</td>
+      <td>1.775000</td>
+    </tr>
+    <tr>
+      <td>Top候选数</td>
+      <td>20.000000</td>
+    </tr>
+    <tr>
+      <td>样本外资本利得为正占比</td>
+      <td>0.900000</td>
+    </tr>
+    <tr>
+      <td>样本外超额为正占比</td>
+      <td>1.000000</td>
+    </tr>
+    <tr>
+      <td>样本外资本利得中位数_BP</td>
+      <td>7.670000</td>
+    </tr>
+    <tr>
+      <td>训练与样本外排名相关性</td>
+      <td>-0.018554</td>
+    </tr>
+    <tr>
+      <td>训练期第一名的样本外排名</td>
+      <td>14.000000</td>
+    </tr>
+  </tbody>
+</table><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>training_rank</th>
+      <th>training_objective</th>
+      <th>training_capital_gain_total_bp</th>
+      <th>training_capital_gain_excess_bp</th>
+      <th>oos_capital_gain_total_bp</th>
+      <th>oos_capital_gain_excess_bp</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>110.85525</td>
+      <td>92.395</td>
+      <td>28.145</td>
+      <td>8.185</td>
+      <td>8.310</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>110.49050</td>
+      <td>92.640</td>
+      <td>26.490</td>
+      <td>7.945</td>
+      <td>8.665</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>110.40475</td>
+      <td>91.530</td>
+      <td>27.035</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>110.40475</td>
+      <td>91.530</td>
+      <td>27.035</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>110.26500</td>
+      <td>88.350</td>
+      <td>29.020</td>
+      <td>8.185</td>
+      <td>8.310</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>109.91025</td>
+      <td>89.845</td>
+      <td>26.405</td>
+      <td>2.410</td>
+      <td>4.695</td>
+    </tr>
+    <tr>
+      <td>11</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>12</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>13</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.400</td>
+      <td>7.900</td>
+    </tr>
+    <tr>
+      <td>14</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>16</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>17</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.945</td>
+      <td>8.665</td>
+    </tr>
+    <tr>
+      <td>18</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>19</td>
+      <td>108.79600</td>
+      <td>88.455</td>
+      <td>23.060</td>
+      <td>-0.615</td>
+      <td>5.035</td>
+    </tr>
+    <tr>
+      <td>20</td>
+      <td>108.45050</td>
+      <td>90.015</td>
+      <td>20.430</td>
+      <td>-0.850</td>
+      <td>5.240</td>
+    </tr>
+  </tbody>
+</table></section></body>
 </html>
 </div><div class="chart"><!DOCTYPE html>
 <html>
@@ -1479,11 +1049,11 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
     
 </head>
 <body >
-    <div id="59790c1f162c4ea8bd008b7fa4f27ac4" class="chart-container" style="width:100%; height:390px; "></div>
+    <div id="34ebfecf135e4568a89d9bc8ef251016" class="chart-container" style="width:100%; height:390px; "></div>
     <script>
-        var chart_59790c1f162c4ea8bd008b7fa4f27ac4 = echarts.init(
-            document.getElementById('59790c1f162c4ea8bd008b7fa4f27ac4'), 'white', {renderer: 'canvas'});
-        var option_59790c1f162c4ea8bd008b7fa4f27ac4 = {
+        var chart_34ebfecf135e4568a89d9bc8ef251016 = echarts.init(
+            document.getElementById('34ebfecf135e4568a89d9bc8ef251016'), 'white', {renderer: 'canvas'});
+        var option_34ebfecf135e4568a89d9bc8ef251016 = {
     "animation": true,
     "animationThreshold": 2000,
     "animationDuration": 1000,
@@ -1523,23 +1093,23 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
             "data": [
                 [
                     "\u00b11BP",
-                    102.46
+                    87.775
                 ],
                 [
                     "\u00b11.5BP",
-                    89.15
+                    88.35
                 ],
                 [
                     "\u00b12BP",
-                    79.73
+                    88.595
                 ],
                 [
                     "\u00b12.5BP",
-                    82.0
+                    90.785
                 ],
                 [
                     "\u00b13BP",
-                    86.31
+                    88.265
                 ]
             ],
             "hoverAnimation": true,
@@ -1577,23 +1147,23 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
             "data": [
                 [
                     "\u00b11BP",
-                    -2.12
+                    31.425
                 ],
                 [
                     "\u00b11.5BP",
-                    -15.43
+                    29.02
                 ],
                 [
                     "\u00b12BP",
-                    -24.85
+                    27.365
                 ],
                 [
                     "\u00b12.5BP",
-                    -22.58
+                    23.835
                 ],
                 [
                     "\u00b13BP",
-                    -18.27
+                    23.13
                 ]
             ],
             "hoverAnimation": true,
@@ -1754,12 +1324,323 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
         }
     ]
 };
-        chart_59790c1f162c4ea8bd008b7fa4f27ac4.setOption(option_59790c1f162c4ea8bd008b7fa4f27ac4);
+        chart_34ebfecf135e4568a89d9bc8ef251016.setOption(option_34ebfecf135e4568a89d9bc8ef251016);
             window.addEventListener('resize', function(){
-                chart_59790c1f162c4ea8bd008b7fa4f27ac4.resize();
+                chart_34ebfecf135e4568a89d9bc8ef251016.resize();
             })
     </script>
-</body>
+<section class='section'><h2>样本内外检验</h2><p>候选参数只按搜索期目标函数排序；样本外、2026年以来和全区间结果均不参与参数选择。</p><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>区间</th>
+      <th>起始日期</th>
+      <th>结束日期</th>
+      <th>累计资本利得_BP</th>
+      <th>年化资本利得_BP</th>
+      <th>条件基准资本利得_BP</th>
+      <th>资本利得超额_BP</th>
+      <th>年化资本利得超额_BP</th>
+      <th>已平仓胜率</th>
+      <th>已平仓交易数</th>
+      <th>平均单笔_BP</th>
+      <th>平均亏损_BP</th>
+      <th>资本利得最大回撤_BP</th>
+      <th>平均持有交易日</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>搜索期</td>
+      <td>2022-01-17</td>
+      <td>2025-06-30</td>
+      <td>94.345</td>
+      <td>28.541345</td>
+      <td>66.09</td>
+      <td>28.255</td>
+      <td>8.547731</td>
+      <td>1.0</td>
+      <td>12</td>
+      <td>7.099167</td>
+      <td>None</td>
+      <td>-14.660</td>
+      <td>57.692308</td>
+    </tr>
+    <tr>
+      <td>样本外</td>
+      <td>2025-07-01</td>
+      <td>2026-07-14</td>
+      <td>2.655</td>
+      <td>2.665578</td>
+      <td>-2.33</td>
+      <td>4.985</td>
+      <td>5.004861</td>
+      <td>1.0</td>
+      <td>2</td>
+      <td>1.087500</td>
+      <td>None</td>
+      <td>-12.885</td>
+      <td>81.000000</td>
+    </tr>
+    <tr>
+      <td>2026年以来</td>
+      <td>2026-01-01</td>
+      <td>2026-07-14</td>
+      <td>11.705</td>
+      <td>23.597280</td>
+      <td>2.73</td>
+      <td>8.975</td>
+      <td>18.093600</td>
+      <td>1.0</td>
+      <td>1</td>
+      <td>11.225000</td>
+      <td>None</td>
+      <td>-3.735</td>
+      <td>61.000000</td>
+    </tr>
+    <tr>
+      <td>全区间</td>
+      <td>2022-01-17</td>
+      <td>2026-07-14</td>
+      <td>96.875</td>
+      <td>22.500000</td>
+      <td>63.94</td>
+      <td>32.935</td>
+      <td>7.649419</td>
+      <td>1.0</td>
+      <td>14</td>
+      <td>6.885357</td>
+      <td>None</td>
+      <td>-14.660</td>
+      <td>66.200000</td>
+    </tr>
+  </tbody>
+</table><h2>Top候选稳定性</h2><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>指标</th>
+      <th>数值</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>年化资本利得衰减_BP</td>
+      <td>-25.875767</td>
+    </tr>
+    <tr>
+      <td>年化超额衰减_BP</td>
+      <td>-3.542871</td>
+    </tr>
+    <tr>
+      <td>样本外年化保留率</td>
+      <td>0.093394</td>
+    </tr>
+    <tr>
+      <td>样本外胜率变化</td>
+      <td>0.000000</td>
+    </tr>
+    <tr>
+      <td>样本外回撤变化_BP</td>
+      <td>1.775000</td>
+    </tr>
+    <tr>
+      <td>Top候选数</td>
+      <td>20.000000</td>
+    </tr>
+    <tr>
+      <td>样本外资本利得为正占比</td>
+      <td>0.900000</td>
+    </tr>
+    <tr>
+      <td>样本外超额为正占比</td>
+      <td>1.000000</td>
+    </tr>
+    <tr>
+      <td>样本外资本利得中位数_BP</td>
+      <td>7.670000</td>
+    </tr>
+    <tr>
+      <td>训练与样本外排名相关性</td>
+      <td>-0.018554</td>
+    </tr>
+    <tr>
+      <td>训练期第一名的样本外排名</td>
+      <td>14.000000</td>
+    </tr>
+  </tbody>
+</table><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>training_rank</th>
+      <th>training_objective</th>
+      <th>training_capital_gain_total_bp</th>
+      <th>training_capital_gain_excess_bp</th>
+      <th>oos_capital_gain_total_bp</th>
+      <th>oos_capital_gain_excess_bp</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>110.85525</td>
+      <td>92.395</td>
+      <td>28.145</td>
+      <td>8.185</td>
+      <td>8.310</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>110.49050</td>
+      <td>92.640</td>
+      <td>26.490</td>
+      <td>7.945</td>
+      <td>8.665</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>110.40475</td>
+      <td>91.530</td>
+      <td>27.035</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>110.40475</td>
+      <td>91.530</td>
+      <td>27.035</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>110.26500</td>
+      <td>88.350</td>
+      <td>29.020</td>
+      <td>8.185</td>
+      <td>8.310</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>109.91025</td>
+      <td>89.845</td>
+      <td>26.405</td>
+      <td>2.410</td>
+      <td>4.695</td>
+    </tr>
+    <tr>
+      <td>11</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>12</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>13</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.400</td>
+      <td>7.900</td>
+    </tr>
+    <tr>
+      <td>14</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>16</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>17</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.945</td>
+      <td>8.665</td>
+    </tr>
+    <tr>
+      <td>18</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>19</td>
+      <td>108.79600</td>
+      <td>88.455</td>
+      <td>23.060</td>
+      <td>-0.615</td>
+      <td>5.035</td>
+    </tr>
+    <tr>
+      <td>20</td>
+      <td>108.45050</td>
+      <td>90.015</td>
+      <td>20.430</td>
+      <td>-0.850</td>
+      <td>5.240</td>
+    </tr>
+  </tbody>
+</table></section></body>
 </html>
 </div><div class="chart"><!DOCTYPE html>
 <html>
@@ -1771,11 +1652,1820 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
     
 </head>
 <body >
-    <div id="e67e5682a4e94cb9816186c94df139ef" class="chart-container" style="width:100%; height:430px; "></div>
+    <div id="6973cf0dba2d4ef0a2ddb172cb460111" class="chart-container" style="width:100%; height:390px; "></div>
     <script>
-        var chart_e67e5682a4e94cb9816186c94df139ef = echarts.init(
-            document.getElementById('e67e5682a4e94cb9816186c94df139ef'), 'white', {renderer: 'canvas'});
-        var option_e67e5682a4e94cb9816186c94df139ef = {
+        var chart_6973cf0dba2d4ef0a2ddb172cb460111 = echarts.init(
+            document.getElementById('6973cf0dba2d4ef0a2ddb172cb460111'), 'white', {renderer: 'canvas'});
+        var option_6973cf0dba2d4ef0a2ddb172cb460111 = {
+    "animation": true,
+    "animationThreshold": 2000,
+    "animationDuration": 1000,
+    "animationEasing": "cubicOut",
+    "animationDelay": 0,
+    "animationDurationUpdate": 300,
+    "animationEasingUpdate": "cubicOut",
+    "animationDelayUpdate": 0,
+    "aria": {
+        "enabled": false
+    },
+    "color": [
+        "#bb654f",
+        "#176b5b",
+        "#5470c6",
+        "#91cc75",
+        "#fac858",
+        "#ee6666",
+        "#73c0de",
+        "#3ba272",
+        "#fc8452",
+        "#9a60b4",
+        "#ea7ccc"
+    ],
+    "series": [
+        {
+            "type": "line",
+            "name": "\u7d2f\u8ba1\u8d44\u672c\u5229\u5f97",
+            "connectNulls": false,
+            "xAxisIndex": 0,
+            "symbolSize": 4,
+            "showSymbol": true,
+            "smooth": false,
+            "clip": true,
+            "step": false,
+            "stackStrategy": "samesign",
+            "data": [
+                [
+                    "15/85",
+                    89.845
+                ],
+                [
+                    "20/80",
+                    88.595
+                ],
+                [
+                    "25/75",
+                    94.375
+                ],
+                [
+                    "30/70",
+                    91.52
+                ],
+                [
+                    "35/65",
+                    88.38
+                ]
+            ],
+            "hoverAnimation": true,
+            "label": {
+                "show": true,
+                "margin": 8,
+                "valueAnimation": false
+            },
+            "logBase": 10,
+            "seriesLayoutBy": "column",
+            "lineStyle": {
+                "show": true,
+                "width": 1,
+                "opacity": 1,
+                "curveness": 0,
+                "type": "solid"
+            },
+            "areaStyle": {
+                "opacity": 0
+            },
+            "zlevel": 0,
+            "z": 0
+        },
+        {
+            "type": "line",
+            "name": "\u8d44\u672c\u5229\u5f97\u8d85\u989d",
+            "connectNulls": false,
+            "xAxisIndex": 0,
+            "symbolSize": 4,
+            "showSymbol": true,
+            "smooth": false,
+            "clip": true,
+            "step": false,
+            "stackStrategy": "samesign",
+            "data": [
+                [
+                    "15/85",
+                    26.405
+                ],
+                [
+                    "20/80",
+                    27.365
+                ],
+                [
+                    "25/75",
+                    25.1
+                ],
+                [
+                    "30/70",
+                    22.005
+                ],
+                [
+                    "35/65",
+                    22.915
+                ]
+            ],
+            "hoverAnimation": true,
+            "label": {
+                "show": true,
+                "margin": 8,
+                "valueAnimation": false
+            },
+            "logBase": 10,
+            "seriesLayoutBy": "column",
+            "lineStyle": {
+                "show": true,
+                "width": 1,
+                "opacity": 1,
+                "curveness": 0,
+                "type": "solid"
+            },
+            "areaStyle": {
+                "opacity": 0
+            },
+            "zlevel": 0,
+            "z": 0
+        }
+    ],
+    "legend": [
+        {
+            "data": [
+                "\u7d2f\u8ba1\u8d44\u672c\u5229\u5f97",
+                "\u8d44\u672c\u5229\u5f97\u8d85\u989d"
+            ],
+            "selected": {},
+            "show": true,
+            "padding": 5,
+            "itemGap": 10,
+            "itemWidth": 25,
+            "itemHeight": 14,
+            "backgroundColor": "transparent",
+            "borderColor": "#ccc",
+            "borderRadius": 0,
+            "pageButtonItemGap": 5,
+            "pageButtonPosition": "end",
+            "pageFormatter": "{current}/{total}",
+            "pageIconColor": "#2f4554",
+            "pageIconInactiveColor": "#aaa",
+            "pageIconSize": 15,
+            "animationDurationUpdate": 800,
+            "selector": false,
+            "selectorPosition": "auto",
+            "selectorItemGap": 7,
+            "selectorButtonGap": 10
+        }
+    ],
+    "tooltip": {
+        "show": true,
+        "trigger": "axis",
+        "triggerOn": "mousemove|click",
+        "axisPointer": {
+            "type": "line"
+        },
+        "showContent": true,
+        "alwaysShowContent": false,
+        "showDelay": 0,
+        "hideDelay": 100,
+        "enterable": false,
+        "confine": false,
+        "appendToBody": false,
+        "transitionDuration": 0.4,
+        "textStyle": {
+            "fontSize": 14
+        },
+        "borderWidth": 0,
+        "padding": 5,
+        "order": "seriesAsc"
+    },
+    "xAxis": [
+        {
+            "type": "category",
+            "show": true,
+            "scale": false,
+            "nameLocation": "end",
+            "nameGap": 15,
+            "gridIndex": 0,
+            "inverse": false,
+            "offset": 0,
+            "splitNumber": 5,
+            "minInterval": 0,
+            "splitLine": {
+                "show": true,
+                "lineStyle": {
+                    "show": true,
+                    "width": 1,
+                    "opacity": 1,
+                    "curveness": 0,
+                    "type": "solid"
+                }
+            },
+            "animation": true,
+            "animationThreshold": 2000,
+            "animationDuration": 1000,
+            "animationEasing": "cubicOut",
+            "animationDelay": 0,
+            "animationDurationUpdate": 300,
+            "animationEasingUpdate": "cubicOut",
+            "animationDelayUpdate": 0,
+            "data": [
+                "15/85",
+                "20/80",
+                "25/75",
+                "30/70",
+                "35/65"
+            ]
+        }
+    ],
+    "yAxis": [
+        {
+            "type": "value",
+            "name": "\u8d44\u672c\u5229\u5f97\uff08BP\uff09",
+            "show": true,
+            "scale": true,
+            "nameLocation": "end",
+            "nameGap": 15,
+            "gridIndex": 0,
+            "inverse": false,
+            "offset": 0,
+            "splitNumber": 5,
+            "minInterval": 0,
+            "splitLine": {
+                "show": true,
+                "lineStyle": {
+                    "show": true,
+                    "width": 1,
+                    "opacity": 1,
+                    "curveness": 0,
+                    "type": "solid"
+                }
+            },
+            "animation": true,
+            "animationThreshold": 2000,
+            "animationDuration": 1000,
+            "animationEasing": "cubicOut",
+            "animationDelay": 0,
+            "animationDurationUpdate": 300,
+            "animationEasingUpdate": "cubicOut",
+            "animationDelayUpdate": 0
+        }
+    ],
+    "title": [
+        {
+            "show": true,
+            "text": "\u5730\u65b9\u503a\u56fd\u503a\u5229\u5dee\u9608\u503c",
+            "target": "blank",
+            "subtarget": "blank",
+            "padding": 5,
+            "itemGap": 10,
+            "textAlign": "auto",
+            "textVerticalAlign": "auto",
+            "triggerEvent": false
+        }
+    ]
+};
+        chart_6973cf0dba2d4ef0a2ddb172cb460111.setOption(option_6973cf0dba2d4ef0a2ddb172cb460111);
+            window.addEventListener('resize', function(){
+                chart_6973cf0dba2d4ef0a2ddb172cb460111.resize();
+            })
+    </script>
+<section class='section'><h2>样本内外检验</h2><p>候选参数只按搜索期目标函数排序；样本外、2026年以来和全区间结果均不参与参数选择。</p><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>区间</th>
+      <th>起始日期</th>
+      <th>结束日期</th>
+      <th>累计资本利得_BP</th>
+      <th>年化资本利得_BP</th>
+      <th>条件基准资本利得_BP</th>
+      <th>资本利得超额_BP</th>
+      <th>年化资本利得超额_BP</th>
+      <th>已平仓胜率</th>
+      <th>已平仓交易数</th>
+      <th>平均单笔_BP</th>
+      <th>平均亏损_BP</th>
+      <th>资本利得最大回撤_BP</th>
+      <th>平均持有交易日</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>搜索期</td>
+      <td>2022-01-17</td>
+      <td>2025-06-30</td>
+      <td>94.345</td>
+      <td>28.541345</td>
+      <td>66.09</td>
+      <td>28.255</td>
+      <td>8.547731</td>
+      <td>1.0</td>
+      <td>12</td>
+      <td>7.099167</td>
+      <td>None</td>
+      <td>-14.660</td>
+      <td>57.692308</td>
+    </tr>
+    <tr>
+      <td>样本外</td>
+      <td>2025-07-01</td>
+      <td>2026-07-14</td>
+      <td>2.655</td>
+      <td>2.665578</td>
+      <td>-2.33</td>
+      <td>4.985</td>
+      <td>5.004861</td>
+      <td>1.0</td>
+      <td>2</td>
+      <td>1.087500</td>
+      <td>None</td>
+      <td>-12.885</td>
+      <td>81.000000</td>
+    </tr>
+    <tr>
+      <td>2026年以来</td>
+      <td>2026-01-01</td>
+      <td>2026-07-14</td>
+      <td>11.705</td>
+      <td>23.597280</td>
+      <td>2.73</td>
+      <td>8.975</td>
+      <td>18.093600</td>
+      <td>1.0</td>
+      <td>1</td>
+      <td>11.225000</td>
+      <td>None</td>
+      <td>-3.735</td>
+      <td>61.000000</td>
+    </tr>
+    <tr>
+      <td>全区间</td>
+      <td>2022-01-17</td>
+      <td>2026-07-14</td>
+      <td>96.875</td>
+      <td>22.500000</td>
+      <td>63.94</td>
+      <td>32.935</td>
+      <td>7.649419</td>
+      <td>1.0</td>
+      <td>14</td>
+      <td>6.885357</td>
+      <td>None</td>
+      <td>-14.660</td>
+      <td>66.200000</td>
+    </tr>
+  </tbody>
+</table><h2>Top候选稳定性</h2><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>指标</th>
+      <th>数值</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>年化资本利得衰减_BP</td>
+      <td>-25.875767</td>
+    </tr>
+    <tr>
+      <td>年化超额衰减_BP</td>
+      <td>-3.542871</td>
+    </tr>
+    <tr>
+      <td>样本外年化保留率</td>
+      <td>0.093394</td>
+    </tr>
+    <tr>
+      <td>样本外胜率变化</td>
+      <td>0.000000</td>
+    </tr>
+    <tr>
+      <td>样本外回撤变化_BP</td>
+      <td>1.775000</td>
+    </tr>
+    <tr>
+      <td>Top候选数</td>
+      <td>20.000000</td>
+    </tr>
+    <tr>
+      <td>样本外资本利得为正占比</td>
+      <td>0.900000</td>
+    </tr>
+    <tr>
+      <td>样本外超额为正占比</td>
+      <td>1.000000</td>
+    </tr>
+    <tr>
+      <td>样本外资本利得中位数_BP</td>
+      <td>7.670000</td>
+    </tr>
+    <tr>
+      <td>训练与样本外排名相关性</td>
+      <td>-0.018554</td>
+    </tr>
+    <tr>
+      <td>训练期第一名的样本外排名</td>
+      <td>14.000000</td>
+    </tr>
+  </tbody>
+</table><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>training_rank</th>
+      <th>training_objective</th>
+      <th>training_capital_gain_total_bp</th>
+      <th>training_capital_gain_excess_bp</th>
+      <th>oos_capital_gain_total_bp</th>
+      <th>oos_capital_gain_excess_bp</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>110.85525</td>
+      <td>92.395</td>
+      <td>28.145</td>
+      <td>8.185</td>
+      <td>8.310</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>110.49050</td>
+      <td>92.640</td>
+      <td>26.490</td>
+      <td>7.945</td>
+      <td>8.665</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>110.40475</td>
+      <td>91.530</td>
+      <td>27.035</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>110.40475</td>
+      <td>91.530</td>
+      <td>27.035</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>110.26500</td>
+      <td>88.350</td>
+      <td>29.020</td>
+      <td>8.185</td>
+      <td>8.310</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>109.91025</td>
+      <td>89.845</td>
+      <td>26.405</td>
+      <td>2.410</td>
+      <td>4.695</td>
+    </tr>
+    <tr>
+      <td>11</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>12</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>13</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.400</td>
+      <td>7.900</td>
+    </tr>
+    <tr>
+      <td>14</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>16</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>17</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.945</td>
+      <td>8.665</td>
+    </tr>
+    <tr>
+      <td>18</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>19</td>
+      <td>108.79600</td>
+      <td>88.455</td>
+      <td>23.060</td>
+      <td>-0.615</td>
+      <td>5.035</td>
+    </tr>
+    <tr>
+      <td>20</td>
+      <td>108.45050</td>
+      <td>90.015</td>
+      <td>20.430</td>
+      <td>-0.850</td>
+      <td>5.240</td>
+    </tr>
+  </tbody>
+</table></section></body>
+</html>
+</div><div class="chart"><!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Awesome-pyecharts</title>
+                <script type="text/javascript" src="https://assets.pyecharts.org/assets/v5/echarts.min.js"></script>
+
+    
+</head>
+<body >
+    <div id="672104dcd2eb4c0ebff3bb778c1397d0" class="chart-container" style="width:100%; height:390px; "></div>
+    <script>
+        var chart_672104dcd2eb4c0ebff3bb778c1397d0 = echarts.init(
+            document.getElementById('672104dcd2eb4c0ebff3bb778c1397d0'), 'white', {renderer: 'canvas'});
+        var option_672104dcd2eb4c0ebff3bb778c1397d0 = {
+    "animation": true,
+    "animationThreshold": 2000,
+    "animationDuration": 1000,
+    "animationEasing": "cubicOut",
+    "animationDelay": 0,
+    "animationDurationUpdate": 300,
+    "animationEasingUpdate": "cubicOut",
+    "animationDelayUpdate": 0,
+    "aria": {
+        "enabled": false
+    },
+    "color": [
+        "#bb654f",
+        "#176b5b",
+        "#5470c6",
+        "#91cc75",
+        "#fac858",
+        "#ee6666",
+        "#73c0de",
+        "#3ba272",
+        "#fc8452",
+        "#9a60b4",
+        "#ea7ccc"
+    ],
+    "series": [
+        {
+            "type": "line",
+            "name": "\u7d2f\u8ba1\u8d44\u672c\u5229\u5f97",
+            "connectNulls": false,
+            "xAxisIndex": 0,
+            "symbolSize": 4,
+            "showSymbol": true,
+            "smooth": false,
+            "clip": true,
+            "step": false,
+            "stackStrategy": "samesign",
+            "data": [
+                [
+                    "15/85",
+                    83.56
+                ],
+                [
+                    "20/80",
+                    84.38
+                ],
+                [
+                    "25/75",
+                    88.595
+                ],
+                [
+                    "30/70",
+                    86.48
+                ],
+                [
+                    "35/65",
+                    84.47
+                ]
+            ],
+            "hoverAnimation": true,
+            "label": {
+                "show": true,
+                "margin": 8,
+                "valueAnimation": false
+            },
+            "logBase": 10,
+            "seriesLayoutBy": "column",
+            "lineStyle": {
+                "show": true,
+                "width": 1,
+                "opacity": 1,
+                "curveness": 0,
+                "type": "solid"
+            },
+            "areaStyle": {
+                "opacity": 0
+            },
+            "zlevel": 0,
+            "z": 0
+        },
+        {
+            "type": "line",
+            "name": "\u8d44\u672c\u5229\u5f97\u8d85\u989d",
+            "connectNulls": false,
+            "xAxisIndex": 0,
+            "symbolSize": 4,
+            "showSymbol": true,
+            "smooth": false,
+            "clip": true,
+            "step": false,
+            "stackStrategy": "samesign",
+            "data": [
+                [
+                    "15/85",
+                    19.9
+                ],
+                [
+                    "20/80",
+                    22.405
+                ],
+                [
+                    "25/75",
+                    27.365
+                ],
+                [
+                    "30/70",
+                    27.27
+                ],
+                [
+                    "35/65",
+                    21.99
+                ]
+            ],
+            "hoverAnimation": true,
+            "label": {
+                "show": true,
+                "margin": 8,
+                "valueAnimation": false
+            },
+            "logBase": 10,
+            "seriesLayoutBy": "column",
+            "lineStyle": {
+                "show": true,
+                "width": 1,
+                "opacity": 1,
+                "curveness": 0,
+                "type": "solid"
+            },
+            "areaStyle": {
+                "opacity": 0
+            },
+            "zlevel": 0,
+            "z": 0
+        }
+    ],
+    "legend": [
+        {
+            "data": [
+                "\u7d2f\u8ba1\u8d44\u672c\u5229\u5f97",
+                "\u8d44\u672c\u5229\u5f97\u8d85\u989d"
+            ],
+            "selected": {},
+            "show": true,
+            "padding": 5,
+            "itemGap": 10,
+            "itemWidth": 25,
+            "itemHeight": 14,
+            "backgroundColor": "transparent",
+            "borderColor": "#ccc",
+            "borderRadius": 0,
+            "pageButtonItemGap": 5,
+            "pageButtonPosition": "end",
+            "pageFormatter": "{current}/{total}",
+            "pageIconColor": "#2f4554",
+            "pageIconInactiveColor": "#aaa",
+            "pageIconSize": 15,
+            "animationDurationUpdate": 800,
+            "selector": false,
+            "selectorPosition": "auto",
+            "selectorItemGap": 7,
+            "selectorButtonGap": 10
+        }
+    ],
+    "tooltip": {
+        "show": true,
+        "trigger": "axis",
+        "triggerOn": "mousemove|click",
+        "axisPointer": {
+            "type": "line"
+        },
+        "showContent": true,
+        "alwaysShowContent": false,
+        "showDelay": 0,
+        "hideDelay": 100,
+        "enterable": false,
+        "confine": false,
+        "appendToBody": false,
+        "transitionDuration": 0.4,
+        "textStyle": {
+            "fontSize": 14
+        },
+        "borderWidth": 0,
+        "padding": 5,
+        "order": "seriesAsc"
+    },
+    "xAxis": [
+        {
+            "type": "category",
+            "show": true,
+            "scale": false,
+            "nameLocation": "end",
+            "nameGap": 15,
+            "gridIndex": 0,
+            "inverse": false,
+            "offset": 0,
+            "splitNumber": 5,
+            "minInterval": 0,
+            "splitLine": {
+                "show": true,
+                "lineStyle": {
+                    "show": true,
+                    "width": 1,
+                    "opacity": 1,
+                    "curveness": 0,
+                    "type": "solid"
+                }
+            },
+            "animation": true,
+            "animationThreshold": 2000,
+            "animationDuration": 1000,
+            "animationEasing": "cubicOut",
+            "animationDelay": 0,
+            "animationDurationUpdate": 300,
+            "animationEasingUpdate": "cubicOut",
+            "animationDelayUpdate": 0,
+            "data": [
+                "15/85",
+                "20/80",
+                "25/75",
+                "30/70",
+                "35/65"
+            ]
+        }
+    ],
+    "yAxis": [
+        {
+            "type": "value",
+            "name": "\u8d44\u672c\u5229\u5f97\uff08BP\uff09",
+            "show": true,
+            "scale": true,
+            "nameLocation": "end",
+            "nameGap": 15,
+            "gridIndex": 0,
+            "inverse": false,
+            "offset": 0,
+            "splitNumber": 5,
+            "minInterval": 0,
+            "splitLine": {
+                "show": true,
+                "lineStyle": {
+                    "show": true,
+                    "width": 1,
+                    "opacity": 1,
+                    "curveness": 0,
+                    "type": "solid"
+                }
+            },
+            "animation": true,
+            "animationThreshold": 2000,
+            "animationDuration": 1000,
+            "animationEasing": "cubicOut",
+            "animationDelay": 0,
+            "animationDurationUpdate": 300,
+            "animationEasingUpdate": "cubicOut",
+            "animationDelayUpdate": 0
+        }
+    ],
+    "title": [
+        {
+            "show": true,
+            "text": "\u4f9b\u7ed9\u5206\u4f4d\u9608\u503c",
+            "target": "blank",
+            "subtarget": "blank",
+            "padding": 5,
+            "itemGap": 10,
+            "textAlign": "auto",
+            "textVerticalAlign": "auto",
+            "triggerEvent": false
+        }
+    ]
+};
+        chart_672104dcd2eb4c0ebff3bb778c1397d0.setOption(option_672104dcd2eb4c0ebff3bb778c1397d0);
+            window.addEventListener('resize', function(){
+                chart_672104dcd2eb4c0ebff3bb778c1397d0.resize();
+            })
+    </script>
+<section class='section'><h2>样本内外检验</h2><p>候选参数只按搜索期目标函数排序；样本外、2026年以来和全区间结果均不参与参数选择。</p><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>区间</th>
+      <th>起始日期</th>
+      <th>结束日期</th>
+      <th>累计资本利得_BP</th>
+      <th>年化资本利得_BP</th>
+      <th>条件基准资本利得_BP</th>
+      <th>资本利得超额_BP</th>
+      <th>年化资本利得超额_BP</th>
+      <th>已平仓胜率</th>
+      <th>已平仓交易数</th>
+      <th>平均单笔_BP</th>
+      <th>平均亏损_BP</th>
+      <th>资本利得最大回撤_BP</th>
+      <th>平均持有交易日</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>搜索期</td>
+      <td>2022-01-17</td>
+      <td>2025-06-30</td>
+      <td>94.345</td>
+      <td>28.541345</td>
+      <td>66.09</td>
+      <td>28.255</td>
+      <td>8.547731</td>
+      <td>1.0</td>
+      <td>12</td>
+      <td>7.099167</td>
+      <td>None</td>
+      <td>-14.660</td>
+      <td>57.692308</td>
+    </tr>
+    <tr>
+      <td>样本外</td>
+      <td>2025-07-01</td>
+      <td>2026-07-14</td>
+      <td>2.655</td>
+      <td>2.665578</td>
+      <td>-2.33</td>
+      <td>4.985</td>
+      <td>5.004861</td>
+      <td>1.0</td>
+      <td>2</td>
+      <td>1.087500</td>
+      <td>None</td>
+      <td>-12.885</td>
+      <td>81.000000</td>
+    </tr>
+    <tr>
+      <td>2026年以来</td>
+      <td>2026-01-01</td>
+      <td>2026-07-14</td>
+      <td>11.705</td>
+      <td>23.597280</td>
+      <td>2.73</td>
+      <td>8.975</td>
+      <td>18.093600</td>
+      <td>1.0</td>
+      <td>1</td>
+      <td>11.225000</td>
+      <td>None</td>
+      <td>-3.735</td>
+      <td>61.000000</td>
+    </tr>
+    <tr>
+      <td>全区间</td>
+      <td>2022-01-17</td>
+      <td>2026-07-14</td>
+      <td>96.875</td>
+      <td>22.500000</td>
+      <td>63.94</td>
+      <td>32.935</td>
+      <td>7.649419</td>
+      <td>1.0</td>
+      <td>14</td>
+      <td>6.885357</td>
+      <td>None</td>
+      <td>-14.660</td>
+      <td>66.200000</td>
+    </tr>
+  </tbody>
+</table><h2>Top候选稳定性</h2><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>指标</th>
+      <th>数值</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>年化资本利得衰减_BP</td>
+      <td>-25.875767</td>
+    </tr>
+    <tr>
+      <td>年化超额衰减_BP</td>
+      <td>-3.542871</td>
+    </tr>
+    <tr>
+      <td>样本外年化保留率</td>
+      <td>0.093394</td>
+    </tr>
+    <tr>
+      <td>样本外胜率变化</td>
+      <td>0.000000</td>
+    </tr>
+    <tr>
+      <td>样本外回撤变化_BP</td>
+      <td>1.775000</td>
+    </tr>
+    <tr>
+      <td>Top候选数</td>
+      <td>20.000000</td>
+    </tr>
+    <tr>
+      <td>样本外资本利得为正占比</td>
+      <td>0.900000</td>
+    </tr>
+    <tr>
+      <td>样本外超额为正占比</td>
+      <td>1.000000</td>
+    </tr>
+    <tr>
+      <td>样本外资本利得中位数_BP</td>
+      <td>7.670000</td>
+    </tr>
+    <tr>
+      <td>训练与样本外排名相关性</td>
+      <td>-0.018554</td>
+    </tr>
+    <tr>
+      <td>训练期第一名的样本外排名</td>
+      <td>14.000000</td>
+    </tr>
+  </tbody>
+</table><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>training_rank</th>
+      <th>training_objective</th>
+      <th>training_capital_gain_total_bp</th>
+      <th>training_capital_gain_excess_bp</th>
+      <th>oos_capital_gain_total_bp</th>
+      <th>oos_capital_gain_excess_bp</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>110.85525</td>
+      <td>92.395</td>
+      <td>28.145</td>
+      <td>8.185</td>
+      <td>8.310</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>110.49050</td>
+      <td>92.640</td>
+      <td>26.490</td>
+      <td>7.945</td>
+      <td>8.665</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>110.40475</td>
+      <td>91.530</td>
+      <td>27.035</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>110.40475</td>
+      <td>91.530</td>
+      <td>27.035</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>110.26500</td>
+      <td>88.350</td>
+      <td>29.020</td>
+      <td>8.185</td>
+      <td>8.310</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>109.91025</td>
+      <td>89.845</td>
+      <td>26.405</td>
+      <td>2.410</td>
+      <td>4.695</td>
+    </tr>
+    <tr>
+      <td>11</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>12</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>13</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.400</td>
+      <td>7.900</td>
+    </tr>
+    <tr>
+      <td>14</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>16</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>17</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.945</td>
+      <td>8.665</td>
+    </tr>
+    <tr>
+      <td>18</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>19</td>
+      <td>108.79600</td>
+      <td>88.455</td>
+      <td>23.060</td>
+      <td>-0.615</td>
+      <td>5.035</td>
+    </tr>
+    <tr>
+      <td>20</td>
+      <td>108.45050</td>
+      <td>90.015</td>
+      <td>20.430</td>
+      <td>-0.850</td>
+      <td>5.240</td>
+    </tr>
+  </tbody>
+</table></section></body>
+</html>
+</div><div class="chart"><!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Awesome-pyecharts</title>
+                <script type="text/javascript" src="https://assets.pyecharts.org/assets/v5/echarts.min.js"></script>
+
+    
+</head>
+<body >
+    <div id="bef7b00f918d493aa78623faabef803f" class="chart-container" style="width:100%; height:390px; "></div>
+    <script>
+        var chart_bef7b00f918d493aa78623faabef803f = echarts.init(
+            document.getElementById('bef7b00f918d493aa78623faabef803f'), 'white', {renderer: 'canvas'});
+        var option_bef7b00f918d493aa78623faabef803f = {
+    "animation": true,
+    "animationThreshold": 2000,
+    "animationDuration": 1000,
+    "animationEasing": "cubicOut",
+    "animationDelay": 0,
+    "animationDurationUpdate": 300,
+    "animationEasingUpdate": "cubicOut",
+    "animationDelayUpdate": 0,
+    "aria": {
+        "enabled": false
+    },
+    "color": [
+        "#bb654f",
+        "#176b5b",
+        "#5470c6",
+        "#91cc75",
+        "#fac858",
+        "#ee6666",
+        "#73c0de",
+        "#3ba272",
+        "#fc8452",
+        "#9a60b4",
+        "#ea7ccc"
+    ],
+    "series": [
+        {
+            "type": "line",
+            "name": "\u7d2f\u8ba1\u8d44\u672c\u5229\u5f97",
+            "connectNulls": false,
+            "xAxisIndex": 0,
+            "symbolSize": 4,
+            "showSymbol": true,
+            "smooth": false,
+            "clip": true,
+            "step": false,
+            "stackStrategy": "samesign",
+            "data": [
+                [
+                    "15/85",
+                    87.045
+                ],
+                [
+                    "20/80",
+                    88.595
+                ],
+                [
+                    "25/75",
+                    88.595
+                ],
+                [
+                    "30/70",
+                    87.635
+                ],
+                [
+                    "35/65",
+                    88.355
+                ]
+            ],
+            "hoverAnimation": true,
+            "label": {
+                "show": true,
+                "margin": 8,
+                "valueAnimation": false
+            },
+            "logBase": 10,
+            "seriesLayoutBy": "column",
+            "lineStyle": {
+                "show": true,
+                "width": 1,
+                "opacity": 1,
+                "curveness": 0,
+                "type": "solid"
+            },
+            "areaStyle": {
+                "opacity": 0
+            },
+            "zlevel": 0,
+            "z": 0
+        },
+        {
+            "type": "line",
+            "name": "\u8d44\u672c\u5229\u5f97\u8d85\u989d",
+            "connectNulls": false,
+            "xAxisIndex": 0,
+            "symbolSize": 4,
+            "showSymbol": true,
+            "smooth": false,
+            "clip": true,
+            "step": false,
+            "stackStrategy": "samesign",
+            "data": [
+                [
+                    "15/85",
+                    28.545
+                ],
+                [
+                    "20/80",
+                    27.365
+                ],
+                [
+                    "25/75",
+                    27.365
+                ],
+                [
+                    "30/70",
+                    27.55
+                ],
+                [
+                    "35/65",
+                    28.835
+                ]
+            ],
+            "hoverAnimation": true,
+            "label": {
+                "show": true,
+                "margin": 8,
+                "valueAnimation": false
+            },
+            "logBase": 10,
+            "seriesLayoutBy": "column",
+            "lineStyle": {
+                "show": true,
+                "width": 1,
+                "opacity": 1,
+                "curveness": 0,
+                "type": "solid"
+            },
+            "areaStyle": {
+                "opacity": 0
+            },
+            "zlevel": 0,
+            "z": 0
+        }
+    ],
+    "legend": [
+        {
+            "data": [
+                "\u7d2f\u8ba1\u8d44\u672c\u5229\u5f97",
+                "\u8d44\u672c\u5229\u5f97\u8d85\u989d"
+            ],
+            "selected": {},
+            "show": true,
+            "padding": 5,
+            "itemGap": 10,
+            "itemWidth": 25,
+            "itemHeight": 14,
+            "backgroundColor": "transparent",
+            "borderColor": "#ccc",
+            "borderRadius": 0,
+            "pageButtonItemGap": 5,
+            "pageButtonPosition": "end",
+            "pageFormatter": "{current}/{total}",
+            "pageIconColor": "#2f4554",
+            "pageIconInactiveColor": "#aaa",
+            "pageIconSize": 15,
+            "animationDurationUpdate": 800,
+            "selector": false,
+            "selectorPosition": "auto",
+            "selectorItemGap": 7,
+            "selectorButtonGap": 10
+        }
+    ],
+    "tooltip": {
+        "show": true,
+        "trigger": "axis",
+        "triggerOn": "mousemove|click",
+        "axisPointer": {
+            "type": "line"
+        },
+        "showContent": true,
+        "alwaysShowContent": false,
+        "showDelay": 0,
+        "hideDelay": 100,
+        "enterable": false,
+        "confine": false,
+        "appendToBody": false,
+        "transitionDuration": 0.4,
+        "textStyle": {
+            "fontSize": 14
+        },
+        "borderWidth": 0,
+        "padding": 5,
+        "order": "seriesAsc"
+    },
+    "xAxis": [
+        {
+            "type": "category",
+            "show": true,
+            "scale": false,
+            "nameLocation": "end",
+            "nameGap": 15,
+            "gridIndex": 0,
+            "inverse": false,
+            "offset": 0,
+            "splitNumber": 5,
+            "minInterval": 0,
+            "splitLine": {
+                "show": true,
+                "lineStyle": {
+                    "show": true,
+                    "width": 1,
+                    "opacity": 1,
+                    "curveness": 0,
+                    "type": "solid"
+                }
+            },
+            "animation": true,
+            "animationThreshold": 2000,
+            "animationDuration": 1000,
+            "animationEasing": "cubicOut",
+            "animationDelay": 0,
+            "animationDurationUpdate": 300,
+            "animationEasingUpdate": "cubicOut",
+            "animationDelayUpdate": 0,
+            "data": [
+                "15/85",
+                "20/80",
+                "25/75",
+                "30/70",
+                "35/65"
+            ]
+        }
+    ],
+    "yAxis": [
+        {
+            "type": "value",
+            "name": "\u8d44\u672c\u5229\u5f97\uff08BP\uff09",
+            "show": true,
+            "scale": true,
+            "nameLocation": "end",
+            "nameGap": 15,
+            "gridIndex": 0,
+            "inverse": false,
+            "offset": 0,
+            "splitNumber": 5,
+            "minInterval": 0,
+            "splitLine": {
+                "show": true,
+                "lineStyle": {
+                    "show": true,
+                    "width": 1,
+                    "opacity": 1,
+                    "curveness": 0,
+                    "type": "solid"
+                }
+            },
+            "animation": true,
+            "animationThreshold": 2000,
+            "animationDuration": 1000,
+            "animationEasing": "cubicOut",
+            "animationDelay": 0,
+            "animationDurationUpdate": 300,
+            "animationEasingUpdate": "cubicOut",
+            "animationDelayUpdate": 0
+        }
+    ],
+    "title": [
+        {
+            "show": true,
+            "text": "\u94f6\u884c\u9700\u6c42\u5206\u4f4d\u9608\u503c",
+            "target": "blank",
+            "subtarget": "blank",
+            "padding": 5,
+            "itemGap": 10,
+            "textAlign": "auto",
+            "textVerticalAlign": "auto",
+            "triggerEvent": false
+        }
+    ]
+};
+        chart_bef7b00f918d493aa78623faabef803f.setOption(option_bef7b00f918d493aa78623faabef803f);
+            window.addEventListener('resize', function(){
+                chart_bef7b00f918d493aa78623faabef803f.resize();
+            })
+    </script>
+<section class='section'><h2>样本内外检验</h2><p>候选参数只按搜索期目标函数排序；样本外、2026年以来和全区间结果均不参与参数选择。</p><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>区间</th>
+      <th>起始日期</th>
+      <th>结束日期</th>
+      <th>累计资本利得_BP</th>
+      <th>年化资本利得_BP</th>
+      <th>条件基准资本利得_BP</th>
+      <th>资本利得超额_BP</th>
+      <th>年化资本利得超额_BP</th>
+      <th>已平仓胜率</th>
+      <th>已平仓交易数</th>
+      <th>平均单笔_BP</th>
+      <th>平均亏损_BP</th>
+      <th>资本利得最大回撤_BP</th>
+      <th>平均持有交易日</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>搜索期</td>
+      <td>2022-01-17</td>
+      <td>2025-06-30</td>
+      <td>94.345</td>
+      <td>28.541345</td>
+      <td>66.09</td>
+      <td>28.255</td>
+      <td>8.547731</td>
+      <td>1.0</td>
+      <td>12</td>
+      <td>7.099167</td>
+      <td>None</td>
+      <td>-14.660</td>
+      <td>57.692308</td>
+    </tr>
+    <tr>
+      <td>样本外</td>
+      <td>2025-07-01</td>
+      <td>2026-07-14</td>
+      <td>2.655</td>
+      <td>2.665578</td>
+      <td>-2.33</td>
+      <td>4.985</td>
+      <td>5.004861</td>
+      <td>1.0</td>
+      <td>2</td>
+      <td>1.087500</td>
+      <td>None</td>
+      <td>-12.885</td>
+      <td>81.000000</td>
+    </tr>
+    <tr>
+      <td>2026年以来</td>
+      <td>2026-01-01</td>
+      <td>2026-07-14</td>
+      <td>11.705</td>
+      <td>23.597280</td>
+      <td>2.73</td>
+      <td>8.975</td>
+      <td>18.093600</td>
+      <td>1.0</td>
+      <td>1</td>
+      <td>11.225000</td>
+      <td>None</td>
+      <td>-3.735</td>
+      <td>61.000000</td>
+    </tr>
+    <tr>
+      <td>全区间</td>
+      <td>2022-01-17</td>
+      <td>2026-07-14</td>
+      <td>96.875</td>
+      <td>22.500000</td>
+      <td>63.94</td>
+      <td>32.935</td>
+      <td>7.649419</td>
+      <td>1.0</td>
+      <td>14</td>
+      <td>6.885357</td>
+      <td>None</td>
+      <td>-14.660</td>
+      <td>66.200000</td>
+    </tr>
+  </tbody>
+</table><h2>Top候选稳定性</h2><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>指标</th>
+      <th>数值</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>年化资本利得衰减_BP</td>
+      <td>-25.875767</td>
+    </tr>
+    <tr>
+      <td>年化超额衰减_BP</td>
+      <td>-3.542871</td>
+    </tr>
+    <tr>
+      <td>样本外年化保留率</td>
+      <td>0.093394</td>
+    </tr>
+    <tr>
+      <td>样本外胜率变化</td>
+      <td>0.000000</td>
+    </tr>
+    <tr>
+      <td>样本外回撤变化_BP</td>
+      <td>1.775000</td>
+    </tr>
+    <tr>
+      <td>Top候选数</td>
+      <td>20.000000</td>
+    </tr>
+    <tr>
+      <td>样本外资本利得为正占比</td>
+      <td>0.900000</td>
+    </tr>
+    <tr>
+      <td>样本外超额为正占比</td>
+      <td>1.000000</td>
+    </tr>
+    <tr>
+      <td>样本外资本利得中位数_BP</td>
+      <td>7.670000</td>
+    </tr>
+    <tr>
+      <td>训练与样本外排名相关性</td>
+      <td>-0.018554</td>
+    </tr>
+    <tr>
+      <td>训练期第一名的样本外排名</td>
+      <td>14.000000</td>
+    </tr>
+  </tbody>
+</table><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>training_rank</th>
+      <th>training_objective</th>
+      <th>training_capital_gain_total_bp</th>
+      <th>training_capital_gain_excess_bp</th>
+      <th>oos_capital_gain_total_bp</th>
+      <th>oos_capital_gain_excess_bp</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>110.85525</td>
+      <td>92.395</td>
+      <td>28.145</td>
+      <td>8.185</td>
+      <td>8.310</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>110.49050</td>
+      <td>92.640</td>
+      <td>26.490</td>
+      <td>7.945</td>
+      <td>8.665</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>110.40475</td>
+      <td>91.530</td>
+      <td>27.035</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>110.40475</td>
+      <td>91.530</td>
+      <td>27.035</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>110.26500</td>
+      <td>88.350</td>
+      <td>29.020</td>
+      <td>8.185</td>
+      <td>8.310</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>109.91025</td>
+      <td>89.845</td>
+      <td>26.405</td>
+      <td>2.410</td>
+      <td>4.695</td>
+    </tr>
+    <tr>
+      <td>11</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>12</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>13</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.400</td>
+      <td>7.900</td>
+    </tr>
+    <tr>
+      <td>14</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>16</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>17</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.945</td>
+      <td>8.665</td>
+    </tr>
+    <tr>
+      <td>18</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>19</td>
+      <td>108.79600</td>
+      <td>88.455</td>
+      <td>23.060</td>
+      <td>-0.615</td>
+      <td>5.035</td>
+    </tr>
+    <tr>
+      <td>20</td>
+      <td>108.45050</td>
+      <td>90.015</td>
+      <td>20.430</td>
+      <td>-0.850</td>
+      <td>5.240</td>
+    </tr>
+  </tbody>
+</table></section></body>
+</html>
+</div><div class="chart"><!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Awesome-pyecharts</title>
+                <script type="text/javascript" src="https://assets.pyecharts.org/assets/v5/echarts.min.js"></script>
+
+    
+</head>
+<body >
+    <div id="85a1fbaa62984dc697ac62d993af12c7" class="chart-container" style="width:100%; height:430px; "></div>
+    <script>
+        var chart_85a1fbaa62984dc697ac62d993af12c7 = echarts.init(
+            document.getElementById('85a1fbaa62984dc697ac62d993af12c7'), 'white', {renderer: 'canvas'});
+        var option_85a1fbaa62984dc697ac62d993af12c7 = {
     "animation": true,
     "animationThreshold": 2000,
     "animationDuration": 1000,
@@ -1806,332 +3496,332 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
             "symbolSize": 8,
             "data": [
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    28.255
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    28.255
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    28.255
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    28.255
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    28.145
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    26.49
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    27.035
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    27.035
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    29.02
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    26.405
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    27.365
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    27.365
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    27.365
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    27.365
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    27.365
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    27.365
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    27.365
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    27.365
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    23.06
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    20.43
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    22.405
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -17.515,
+                    25.02
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -17.515,
+                    20.67
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -17.515,
+                    20.79
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -17.515,
+                    20.26
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -17.515,
+                    20.26
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    25.73
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    31.425
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    29.445
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    29.445
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    28.545
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    25.1
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    22.155
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    28.835
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    27.55
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    20.68
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    18.865
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    26.39
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    26.39
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    26.51
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    26.51
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.66,
+                    19.9
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -17.515,
+                    20.98
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -17.515,
+                    22.005
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -17.515,
+                    17.405
                 ],
                 [
-                    -8.83,
-                    -2.12
+                    -14.165,
+                    26.735
                 ],
                 [
-                    -8.83,
-                    -3.86
+                    -13.775,
+                    24.75
                 ],
                 [
-                    -8.33,
-                    -3.95
+                    -14.165,
+                    26.395
                 ],
                 [
-                    -8.83,
-                    -4.62
+                    -14.66,
+                    19.775
                 ],
                 [
-                    -8.83,
-                    -5.72
+                    -14.165,
+                    27.27
                 ],
                 [
-                    -8.83,
-                    -5.72
+                    -14.58,
+                    23.835
                 ],
                 [
-                    -9.74,
-                    -7.27
+                    -14.58,
+                    23.13
                 ],
                 [
-                    -9.74,
-                    -7.27
+                    -17.02,
+                    19.23
                 ],
                 [
-                    -8.83,
-                    -8.44
+                    -17.515,
+                    19.99
                 ],
                 [
-                    -9.74,
-                    -12.88
+                    -14.165,
+                    23.98
                 ],
                 [
-                    -9.74,
-                    -12.88
+                    -17.515,
+                    15.025
                 ],
                 [
-                    -8.83,
-                    -15.43
+                    -13.775,
+                    22.22
                 ],
                 [
-                    -8.83,
-                    -15.43
+                    -13.775,
+                    22.95
                 ],
                 [
-                    -8.83,
-                    -18.27
+                    -14.085,
+                    21.99
                 ],
                 [
-                    -8.83,
-                    -18.27
+                    -17.515,
+                    21.89
                 ],
                 [
-                    -9.49,
-                    -19.51
+                    -17.515,
+                    20.095
                 ],
                 [
-                    -9.49,
-                    -21.03
+                    -17.515,
+                    20.095
                 ],
                 [
-                    -8.83,
-                    -21.25
+                    -17.515,
+                    20.095
                 ],
                 [
-                    -8.83,
-                    -22.58
+                    -17.515,
+                    20.095
                 ],
                 [
-                    -8.83,
-                    -22.58
+                    -17.515,
+                    17.61
                 ],
                 [
-                    -9.91,
-                    -22.62
+                    -17.515,
+                    22.915
                 ],
                 [
-                    -9.91,
-                    -22.62
+                    -16.94,
+                    17.375
                 ],
                 [
-                    -7.38,
-                    -24.32
+                    -13.775,
+                    20.685
                 ],
                 [
-                    -8.83,
-                    -24.85
+                    -13.775,
+                    14.165
                 ],
                 [
-                    -8.83,
-                    -24.85
+                    -17.02,
+                    20.14
                 ],
                 [
-                    -7.46,
-                    -26.39
+                    -13.775,
+                    16.3
                 ],
                 [
-                    -7.37,
-                    -28.94
+                    -13.775,
+                    15.595
                 ],
                 [
-                    -8.83,
-                    -29.11
+                    -17.515,
+                    20.715
                 ],
                 [
-                    -8.83,
-                    -30.67
+                    -17.515,
+                    20.715
                 ],
                 [
-                    -9.49,
-                    -32.47
+                    -17.515,
+                    20.715
                 ],
                 [
-                    -7.48,
-                    -33.75
+                    -17.515,
+                    20.715
                 ],
                 [
-                    -8.83,
-                    -33.92
+                    -13.775,
+                    18.425
                 ],
                 [
-                    -7.37,
-                    -34.24
+                    -16.94,
+                    18.93
                 ],
                 [
-                    -7.48,
-                    -34.85
+                    -14.58,
+                    26.5
                 ],
                 [
-                    -8.81,
-                    -38.27
+                    -14.58,
+                    26.5
                 ],
                 [
-                    -9.99,
-                    -48.19
+                    -14.58,
+                    22.745
                 ],
                 [
-                    -10.1,
-                    -48.8
+                    -14.58,
+                    26.36
                 ]
             ],
             "label": {
@@ -2223,88 +3913,88 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
             "animationEasingUpdate": "cubicOut",
             "animationDelayUpdate": 0,
             "data": [
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.33,
-                -8.83,
-                -8.83,
-                -8.83,
-                -9.74,
-                -9.74,
-                -8.83,
-                -9.74,
-                -9.74,
-                -8.83,
-                -8.83,
-                -8.83,
-                -8.83,
-                -9.49,
-                -9.49,
-                -8.83,
-                -8.83,
-                -8.83,
-                -9.91,
-                -9.91,
-                -7.38,
-                -8.83,
-                -8.83,
-                -7.46,
-                -7.37,
-                -8.83,
-                -8.83,
-                -9.49,
-                -7.48,
-                -8.83,
-                -7.37,
-                -7.48,
-                -8.81,
-                -9.99,
-                -10.1
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -17.515,
+                -17.515,
+                -17.515,
+                -17.515,
+                -17.515,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -14.66,
+                -17.515,
+                -17.515,
+                -17.515,
+                -14.165,
+                -13.775,
+                -14.165,
+                -14.66,
+                -14.165,
+                -14.58,
+                -14.58,
+                -17.02,
+                -17.515,
+                -14.165,
+                -17.515,
+                -13.775,
+                -13.775,
+                -14.085,
+                -17.515,
+                -17.515,
+                -17.515,
+                -17.515,
+                -17.515,
+                -17.515,
+                -17.515,
+                -16.94,
+                -13.775,
+                -13.775,
+                -17.02,
+                -13.775,
+                -13.775,
+                -17.515,
+                -17.515,
+                -17.515,
+                -17.515,
+                -13.775,
+                -16.94,
+                -14.58,
+                -14.58,
+                -14.58,
+                -14.58
             ]
         }
     ],
@@ -2355,12 +4045,323 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
         }
     ]
 };
-        chart_e67e5682a4e94cb9816186c94df139ef.setOption(option_e67e5682a4e94cb9816186c94df139ef);
+        chart_85a1fbaa62984dc697ac62d993af12c7.setOption(option_85a1fbaa62984dc697ac62d993af12c7);
             window.addEventListener('resize', function(){
-                chart_e67e5682a4e94cb9816186c94df139ef.resize();
+                chart_85a1fbaa62984dc697ac62d993af12c7.resize();
             })
     </script>
-</body>
+<section class='section'><h2>样本内外检验</h2><p>候选参数只按搜索期目标函数排序；样本外、2026年以来和全区间结果均不参与参数选择。</p><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>区间</th>
+      <th>起始日期</th>
+      <th>结束日期</th>
+      <th>累计资本利得_BP</th>
+      <th>年化资本利得_BP</th>
+      <th>条件基准资本利得_BP</th>
+      <th>资本利得超额_BP</th>
+      <th>年化资本利得超额_BP</th>
+      <th>已平仓胜率</th>
+      <th>已平仓交易数</th>
+      <th>平均单笔_BP</th>
+      <th>平均亏损_BP</th>
+      <th>资本利得最大回撤_BP</th>
+      <th>平均持有交易日</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>搜索期</td>
+      <td>2022-01-17</td>
+      <td>2025-06-30</td>
+      <td>94.345</td>
+      <td>28.541345</td>
+      <td>66.09</td>
+      <td>28.255</td>
+      <td>8.547731</td>
+      <td>1.0</td>
+      <td>12</td>
+      <td>7.099167</td>
+      <td>None</td>
+      <td>-14.660</td>
+      <td>57.692308</td>
+    </tr>
+    <tr>
+      <td>样本外</td>
+      <td>2025-07-01</td>
+      <td>2026-07-14</td>
+      <td>2.655</td>
+      <td>2.665578</td>
+      <td>-2.33</td>
+      <td>4.985</td>
+      <td>5.004861</td>
+      <td>1.0</td>
+      <td>2</td>
+      <td>1.087500</td>
+      <td>None</td>
+      <td>-12.885</td>
+      <td>81.000000</td>
+    </tr>
+    <tr>
+      <td>2026年以来</td>
+      <td>2026-01-01</td>
+      <td>2026-07-14</td>
+      <td>11.705</td>
+      <td>23.597280</td>
+      <td>2.73</td>
+      <td>8.975</td>
+      <td>18.093600</td>
+      <td>1.0</td>
+      <td>1</td>
+      <td>11.225000</td>
+      <td>None</td>
+      <td>-3.735</td>
+      <td>61.000000</td>
+    </tr>
+    <tr>
+      <td>全区间</td>
+      <td>2022-01-17</td>
+      <td>2026-07-14</td>
+      <td>96.875</td>
+      <td>22.500000</td>
+      <td>63.94</td>
+      <td>32.935</td>
+      <td>7.649419</td>
+      <td>1.0</td>
+      <td>14</td>
+      <td>6.885357</td>
+      <td>None</td>
+      <td>-14.660</td>
+      <td>66.200000</td>
+    </tr>
+  </tbody>
+</table><h2>Top候选稳定性</h2><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>指标</th>
+      <th>数值</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>年化资本利得衰减_BP</td>
+      <td>-25.875767</td>
+    </tr>
+    <tr>
+      <td>年化超额衰减_BP</td>
+      <td>-3.542871</td>
+    </tr>
+    <tr>
+      <td>样本外年化保留率</td>
+      <td>0.093394</td>
+    </tr>
+    <tr>
+      <td>样本外胜率变化</td>
+      <td>0.000000</td>
+    </tr>
+    <tr>
+      <td>样本外回撤变化_BP</td>
+      <td>1.775000</td>
+    </tr>
+    <tr>
+      <td>Top候选数</td>
+      <td>20.000000</td>
+    </tr>
+    <tr>
+      <td>样本外资本利得为正占比</td>
+      <td>0.900000</td>
+    </tr>
+    <tr>
+      <td>样本外超额为正占比</td>
+      <td>1.000000</td>
+    </tr>
+    <tr>
+      <td>样本外资本利得中位数_BP</td>
+      <td>7.670000</td>
+    </tr>
+    <tr>
+      <td>训练与样本外排名相关性</td>
+      <td>-0.018554</td>
+    </tr>
+    <tr>
+      <td>训练期第一名的样本外排名</td>
+      <td>14.000000</td>
+    </tr>
+  </tbody>
+</table><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>training_rank</th>
+      <th>training_objective</th>
+      <th>training_capital_gain_total_bp</th>
+      <th>training_capital_gain_excess_bp</th>
+      <th>oos_capital_gain_total_bp</th>
+      <th>oos_capital_gain_excess_bp</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>110.85525</td>
+      <td>92.395</td>
+      <td>28.145</td>
+      <td>8.185</td>
+      <td>8.310</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>110.49050</td>
+      <td>92.640</td>
+      <td>26.490</td>
+      <td>7.945</td>
+      <td>8.665</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>110.40475</td>
+      <td>91.530</td>
+      <td>27.035</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>110.40475</td>
+      <td>91.530</td>
+      <td>27.035</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>110.26500</td>
+      <td>88.350</td>
+      <td>29.020</td>
+      <td>8.185</td>
+      <td>8.310</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>109.91025</td>
+      <td>89.845</td>
+      <td>26.405</td>
+      <td>2.410</td>
+      <td>4.695</td>
+    </tr>
+    <tr>
+      <td>11</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>12</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>13</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.400</td>
+      <td>7.900</td>
+    </tr>
+    <tr>
+      <td>14</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>16</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>17</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.945</td>
+      <td>8.665</td>
+    </tr>
+    <tr>
+      <td>18</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>19</td>
+      <td>108.79600</td>
+      <td>88.455</td>
+      <td>23.060</td>
+      <td>-0.615</td>
+      <td>5.035</td>
+    </tr>
+    <tr>
+      <td>20</td>
+      <td>108.45050</td>
+      <td>90.015</td>
+      <td>20.430</td>
+      <td>-0.850</td>
+      <td>5.240</td>
+    </tr>
+  </tbody>
+</table></section></body>
 </html>
 </div>
 <h2>目标函数Top20</h2><div class="table-wrap"><table border="1" class="dataframe">
@@ -2382,7 +4383,7 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
       <th>看空总分阈值</th>
       <th>看空最少利空模块数</th>
       <th>看空要求供给或需求利空</th>
-      <th>看空连续确认周数</th>
+      <th>看空连续确认周期数</th>
       <th>目标函数</th>
       <th>策略累计收益率</th>
       <th>基准累计收益率</th>
@@ -2397,6 +4398,7 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
       <th>开仓交易总数</th>
       <th>已平仓交易数</th>
       <th>平均单笔资本利得_BP</th>
+      <th>平均每笔盈利_BP</th>
       <th>最佳交易_BP</th>
       <th>最差交易_BP</th>
       <th>资本利得最大回撤_BP</th>
@@ -2413,906 +4415,1237 @@ body{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHe
   </thead>
   <tbody>
     <tr>
-      <td>阈值原始基线</td>
-      <td>基线</td>
+      <td>单模块最优阈值组合</td>
+      <td>组合基线</td>
       <td>全部</td>
-      <td>阈值原始基线</td>
-      <td>35.0</td>
-      <td>65.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>1.0</td>
-      <td>30.0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>128.260571</td>
-      <td>12.22%</td>
-      <td>20.83%</td>
-      <td>-8.61%</td>
-      <td>2.71%</td>
-      <td>1.281303</td>
-      <td>-0.74%</td>
-      <td>102.46</td>
-      <td>104.58</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
-      <td>36</td>
-      <td>35</td>
-      <td>2.93</td>
-      <td>15.80</td>
-      <td>-3.43</td>
-      <td>-8.83</td>
-      <td>1</td>
-      <td>-0.19</td>
-      <td>20.91%</td>
-      <td>35</td>
-      <td>0</td>
-      <td>0.026606</td>
-      <td>0.09092</td>
-      <td>70.0</td>
-      <td>1.0</td>
-    </tr>
-    <tr>
-      <td>供给分位阈值_35/65</td>
-      <td>单模块敏感性</td>
-      <td>供给分位阈值</td>
-      <td>35/65</td>
-      <td>35.0</td>
-      <td>65.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>1.0</td>
-      <td>30.0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>128.260571</td>
-      <td>12.22%</td>
-      <td>20.83%</td>
-      <td>-8.61%</td>
-      <td>2.71%</td>
-      <td>1.281303</td>
-      <td>-0.74%</td>
-      <td>102.46</td>
-      <td>104.58</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
-      <td>36</td>
-      <td>35</td>
-      <td>2.93</td>
-      <td>15.80</td>
-      <td>-3.43</td>
-      <td>-8.83</td>
-      <td>1</td>
-      <td>-0.19</td>
-      <td>20.91%</td>
-      <td>35</td>
-      <td>0</td>
-      <td>0.026606</td>
-      <td>0.09092</td>
-      <td>70.0</td>
-      <td>1.0</td>
-    </tr>
-    <tr>
-      <td>银行需求分位阈值_25/75</td>
-      <td>单模块敏感性</td>
-      <td>银行需求分位阈值</td>
-      <td>25/75</td>
-      <td>35.0</td>
-      <td>65.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>1.0</td>
-      <td>30.0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>128.260571</td>
-      <td>12.22%</td>
-      <td>20.83%</td>
-      <td>-8.61%</td>
-      <td>2.71%</td>
-      <td>1.281303</td>
-      <td>-0.74%</td>
-      <td>102.46</td>
-      <td>104.58</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
-      <td>36</td>
-      <td>35</td>
-      <td>2.93</td>
-      <td>15.80</td>
-      <td>-3.43</td>
-      <td>-8.83</td>
-      <td>1</td>
-      <td>-0.19</td>
-      <td>20.91%</td>
-      <td>35</td>
-      <td>0</td>
-      <td>0.026606</td>
-      <td>0.09092</td>
-      <td>70.0</td>
-      <td>1.0</td>
-    </tr>
-    <tr>
-      <td>地方债国债利差阈值_15/85</td>
-      <td>单模块敏感性</td>
-      <td>地方债国债利差阈值</td>
-      <td>15/85</td>
-      <td>35.0</td>
-      <td>65.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>15.0</td>
-      <td>85.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>1.0</td>
-      <td>30.0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>128.260571</td>
-      <td>12.22%</td>
-      <td>20.83%</td>
-      <td>-8.61%</td>
-      <td>2.71%</td>
-      <td>1.281303</td>
-      <td>-0.74%</td>
-      <td>102.46</td>
-      <td>104.58</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
-      <td>36</td>
-      <td>35</td>
-      <td>2.93</td>
-      <td>15.80</td>
-      <td>-3.43</td>
-      <td>-8.83</td>
-      <td>1</td>
-      <td>-0.19</td>
-      <td>20.91%</td>
-      <td>35</td>
-      <td>0</td>
-      <td>0.026606</td>
-      <td>0.09092</td>
-      <td>70.0</td>
-      <td>1.0</td>
-    </tr>
-    <tr>
-      <td>地方债国债利差阈值_20/80</td>
-      <td>单模块敏感性</td>
-      <td>地方债国债利差阈值</td>
-      <td>20/80</td>
-      <td>35.0</td>
-      <td>65.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>20.0</td>
-      <td>80.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>1.0</td>
-      <td>30.0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>128.260571</td>
-      <td>12.22%</td>
-      <td>20.83%</td>
-      <td>-8.61%</td>
-      <td>2.71%</td>
-      <td>1.281303</td>
-      <td>-0.74%</td>
-      <td>102.46</td>
-      <td>104.58</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
-      <td>36</td>
-      <td>35</td>
-      <td>2.93</td>
-      <td>15.80</td>
-      <td>-3.43</td>
-      <td>-8.83</td>
-      <td>1</td>
-      <td>-0.19</td>
-      <td>20.91%</td>
-      <td>35</td>
-      <td>0</td>
-      <td>0.026606</td>
-      <td>0.09092</td>
-      <td>70.0</td>
-      <td>1.0</td>
-    </tr>
-    <tr>
-      <td>地方债国债利差阈值_25/75</td>
-      <td>单模块敏感性</td>
-      <td>地方债国债利差阈值</td>
-      <td>25/75</td>
-      <td>35.0</td>
-      <td>65.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>1.0</td>
-      <td>30.0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>128.260571</td>
-      <td>12.22%</td>
-      <td>20.83%</td>
-      <td>-8.61%</td>
-      <td>2.71%</td>
-      <td>1.281303</td>
-      <td>-0.74%</td>
-      <td>102.46</td>
-      <td>104.58</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
-      <td>36</td>
-      <td>35</td>
-      <td>2.93</td>
-      <td>15.80</td>
-      <td>-3.43</td>
-      <td>-8.83</td>
-      <td>1</td>
-      <td>-0.19</td>
-      <td>20.91%</td>
-      <td>35</td>
-      <td>0</td>
-      <td>0.026606</td>
-      <td>0.09092</td>
-      <td>70.0</td>
-      <td>1.0</td>
-    </tr>
-    <tr>
-      <td>地方债国债利差阈值_30/70</td>
-      <td>单模块敏感性</td>
-      <td>地方债国债利差阈值</td>
-      <td>30/70</td>
-      <td>35.0</td>
-      <td>65.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>30.0</td>
-      <td>70.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>1.0</td>
-      <td>30.0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>128.260571</td>
-      <td>12.22%</td>
-      <td>20.83%</td>
-      <td>-8.61%</td>
-      <td>2.71%</td>
-      <td>1.281303</td>
-      <td>-0.74%</td>
-      <td>102.46</td>
-      <td>104.58</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
-      <td>36</td>
-      <td>35</td>
-      <td>2.93</td>
-      <td>15.80</td>
-      <td>-3.43</td>
-      <td>-8.83</td>
-      <td>1</td>
-      <td>-0.19</td>
-      <td>20.91%</td>
-      <td>35</td>
-      <td>0</td>
-      <td>0.026606</td>
-      <td>0.09092</td>
-      <td>70.0</td>
-      <td>1.0</td>
-    </tr>
-    <tr>
-      <td>地方债国债利差阈值_35/65</td>
-      <td>单模块敏感性</td>
-      <td>地方债国债利差阈值</td>
-      <td>35/65</td>
-      <td>35.0</td>
-      <td>65.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>35.0</td>
-      <td>65.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>1.0</td>
-      <td>30.0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>128.260571</td>
-      <td>12.22%</td>
-      <td>20.83%</td>
-      <td>-8.61%</td>
-      <td>2.71%</td>
-      <td>1.281303</td>
-      <td>-0.74%</td>
-      <td>102.46</td>
-      <td>104.58</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
-      <td>36</td>
-      <td>35</td>
-      <td>2.93</td>
-      <td>15.80</td>
-      <td>-3.43</td>
-      <td>-8.83</td>
-      <td>1</td>
-      <td>-0.19</td>
-      <td>20.91%</td>
-      <td>35</td>
-      <td>0</td>
-      <td>0.026606</td>
-      <td>0.09092</td>
-      <td>70.0</td>
-      <td>1.0</td>
-    </tr>
-    <tr>
-      <td>地方债NCD利差阈值_15/85</td>
-      <td>单模块敏感性</td>
-      <td>地方债NCD利差阈值</td>
-      <td>15/85</td>
-      <td>35.0</td>
-      <td>65.0</td>
+      <td>单模块最优阈值组合</td>
       <td>25.0</td>
       <td>75.0</td>
       <td>25.0</td>
       <td>75.0</td>
       <td>15.0</td>
       <td>85.0</td>
-      <td>1.0</td>
+      <td>35.0</td>
+      <td>65.0</td>
+      <td>1.5</td>
       <td>30.0</td>
       <td>0</td>
       <td>0</td>
       <td>1</td>
-      <td>128.260571</td>
-      <td>12.22%</td>
-      <td>20.83%</td>
-      <td>-8.61%</td>
-      <td>2.71%</td>
-      <td>1.281303</td>
-      <td>-0.74%</td>
-      <td>102.46</td>
-      <td>104.58</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
-      <td>36</td>
-      <td>35</td>
-      <td>2.93</td>
-      <td>15.80</td>
-      <td>-3.43</td>
-      <td>-8.83</td>
+      <td>111.27275</td>
+      <td>13.46%</td>
+      <td>10.35%</td>
+      <td>3.11%</td>
+      <td>3.89%</td>
+      <td>2.071684</td>
+      <td>-1.17%</td>
+      <td>94.34</td>
+      <td>66.09</td>
+      <td>28.26</td>
+      <td>100.00%</td>
+      <td>13</td>
+      <td>12</td>
+      <td>7.10</td>
+      <td>7.10</td>
+      <td>42.20</td>
+      <td>0.11</td>
+      <td>-14.66</td>
       <td>1</td>
-      <td>-0.19</td>
-      <td>20.91%</td>
-      <td>35</td>
-      <td>0</td>
-      <td>0.026606</td>
-      <td>0.09092</td>
-      <td>70.0</td>
-      <td>1.0</td>
+      <td>9.155</td>
+      <td>64.88%</td>
+      <td>16</td>
+      <td>5</td>
+      <td>0.044401</td>
+      <td>0.083137</td>
+      <td>67.5</td>
+      <td>0.5</td>
     </tr>
     <tr>
-      <td>地方债NCD利差阈值_20/80</td>
-      <td>单模块敏感性</td>
-      <td>地方债NCD利差阈值</td>
-      <td>20/80</td>
+      <td>看空<30_仅总分</td>
+      <td>看空触发条件</td>
+      <td>总分与确认规则</td>
+      <td>仅总分</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>15.0</td>
+      <td>85.0</td>
       <td>35.0</td>
       <td>65.0</td>
+      <td>1.5</td>
+      <td>30.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>111.27275</td>
+      <td>13.46%</td>
+      <td>10.35%</td>
+      <td>3.11%</td>
+      <td>3.89%</td>
+      <td>2.071684</td>
+      <td>-1.17%</td>
+      <td>94.34</td>
+      <td>66.09</td>
+      <td>28.26</td>
+      <td>100.00%</td>
+      <td>13</td>
+      <td>12</td>
+      <td>7.10</td>
+      <td>7.10</td>
+      <td>42.20</td>
+      <td>0.11</td>
+      <td>-14.66</td>
+      <td>1</td>
+      <td>9.155</td>
+      <td>64.88%</td>
+      <td>16</td>
+      <td>5</td>
+      <td>0.044401</td>
+      <td>0.083137</td>
+      <td>67.5</td>
+      <td>0.5</td>
+    </tr>
+    <tr>
+      <td>看空<30_至少2个模块利空</td>
+      <td>看空触发条件</td>
+      <td>总分与确认规则</td>
+      <td>至少2个模块利空</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>15.0</td>
+      <td>85.0</td>
+      <td>35.0</td>
+      <td>65.0</td>
+      <td>1.5</td>
+      <td>30.0</td>
+      <td>2</td>
+      <td>0</td>
+      <td>1</td>
+      <td>111.27275</td>
+      <td>13.46%</td>
+      <td>10.35%</td>
+      <td>3.11%</td>
+      <td>3.89%</td>
+      <td>2.071684</td>
+      <td>-1.17%</td>
+      <td>94.34</td>
+      <td>66.09</td>
+      <td>28.26</td>
+      <td>100.00%</td>
+      <td>13</td>
+      <td>12</td>
+      <td>7.10</td>
+      <td>7.10</td>
+      <td>42.20</td>
+      <td>0.11</td>
+      <td>-14.66</td>
+      <td>1</td>
+      <td>9.155</td>
+      <td>64.88%</td>
+      <td>16</td>
+      <td>5</td>
+      <td>0.044401</td>
+      <td>0.083137</td>
+      <td>67.5</td>
+      <td>0.5</td>
+    </tr>
+    <tr>
+      <td>15/85_x_25/75</td>
+      <td>关键模块交叉</td>
+      <td>地方债国债利差阈值 × 供给分位阈值</td>
+      <td>x_25/75</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>15.0</td>
+      <td>85.0</td>
+      <td>35.0</td>
+      <td>65.0</td>
+      <td>1.5</td>
+      <td>30.0</td>
+      <td>2</td>
+      <td>0</td>
+      <td>1</td>
+      <td>111.27275</td>
+      <td>13.46%</td>
+      <td>10.35%</td>
+      <td>3.11%</td>
+      <td>3.89%</td>
+      <td>2.071684</td>
+      <td>-1.17%</td>
+      <td>94.34</td>
+      <td>66.09</td>
+      <td>28.26</td>
+      <td>100.00%</td>
+      <td>13</td>
+      <td>12</td>
+      <td>7.10</td>
+      <td>7.10</td>
+      <td>42.20</td>
+      <td>0.11</td>
+      <td>-14.66</td>
+      <td>1</td>
+      <td>9.155</td>
+      <td>64.88%</td>
+      <td>16</td>
+      <td>5</td>
+      <td>0.044401</td>
+      <td>0.083137</td>
+      <td>67.5</td>
+      <td>0.5</td>
+    </tr>
+    <tr>
+      <td>20/80_x_25/75</td>
+      <td>关键模块交叉</td>
+      <td>地方债国债利差阈值 × 供给分位阈值</td>
+      <td>x_25/75</td>
       <td>25.0</td>
       <td>75.0</td>
       <td>25.0</td>
       <td>75.0</td>
       <td>20.0</td>
       <td>80.0</td>
-      <td>1.0</td>
-      <td>30.0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>128.260571</td>
-      <td>12.22%</td>
-      <td>20.83%</td>
-      <td>-8.61%</td>
-      <td>2.71%</td>
-      <td>1.281303</td>
-      <td>-0.74%</td>
-      <td>102.46</td>
-      <td>104.58</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
-      <td>36</td>
-      <td>35</td>
-      <td>2.93</td>
-      <td>15.80</td>
-      <td>-3.43</td>
-      <td>-8.83</td>
-      <td>1</td>
-      <td>-0.19</td>
-      <td>20.91%</td>
-      <td>35</td>
-      <td>0</td>
-      <td>0.026606</td>
-      <td>0.09092</td>
-      <td>70.0</td>
-      <td>1.0</td>
-    </tr>
-    <tr>
-      <td>地方债NCD利差阈值_25/75</td>
-      <td>单模块敏感性</td>
-      <td>地方债NCD利差阈值</td>
-      <td>25/75</td>
       <td>35.0</td>
       <td>65.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>1.0</td>
+      <td>1.5</td>
       <td>30.0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>128.260571</td>
-      <td>12.22%</td>
-      <td>20.83%</td>
-      <td>-8.61%</td>
-      <td>2.71%</td>
-      <td>1.281303</td>
-      <td>-0.74%</td>
-      <td>102.46</td>
-      <td>104.58</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
-      <td>36</td>
-      <td>35</td>
-      <td>2.93</td>
-      <td>15.80</td>
-      <td>-3.43</td>
-      <td>-8.83</td>
-      <td>1</td>
-      <td>-0.19</td>
-      <td>20.91%</td>
-      <td>35</td>
-      <td>0</td>
-      <td>0.026606</td>
-      <td>0.09092</td>
-      <td>70.0</td>
-      <td>1.0</td>
-    </tr>
-    <tr>
-      <td>地方债NCD利差阈值_30/70</td>
-      <td>单模块敏感性</td>
-      <td>地方债NCD利差阈值</td>
-      <td>30/70</td>
-      <td>35.0</td>
-      <td>65.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>30.0</td>
-      <td>70.0</td>
-      <td>1.0</td>
-      <td>30.0</td>
-      <td>0</td>
+      <td>2</td>
       <td>0</td>
       <td>1</td>
-      <td>128.260571</td>
-      <td>12.22%</td>
-      <td>20.83%</td>
-      <td>-8.61%</td>
-      <td>2.71%</td>
-      <td>1.281303</td>
-      <td>-0.74%</td>
-      <td>102.46</td>
-      <td>104.58</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
-      <td>36</td>
-      <td>35</td>
-      <td>2.93</td>
-      <td>15.80</td>
-      <td>-3.43</td>
-      <td>-8.83</td>
+      <td>110.85525</td>
+      <td>13.25%</td>
+      <td>10.15%</td>
+      <td>3.10%</td>
+      <td>3.84%</td>
+      <td>2.008308</td>
+      <td>-1.17%</td>
+      <td>92.39</td>
+      <td>64.25</td>
+      <td>28.14</td>
+      <td>100.00%</td>
+      <td>13</td>
+      <td>12</td>
+      <td>7.04</td>
+      <td>7.04</td>
+      <td>42.20</td>
+      <td>0.11</td>
+      <td>-14.66</td>
       <td>1</td>
-      <td>-0.19</td>
-      <td>20.91%</td>
-      <td>35</td>
-      <td>0</td>
-      <td>0.026606</td>
-      <td>0.09092</td>
-      <td>70.0</td>
-      <td>1.0</td>
+      <td>7.905</td>
+      <td>64.29%</td>
+      <td>17</td>
+      <td>3</td>
+      <td>0.044284</td>
+      <td>0.081409</td>
+      <td>67.5</td>
+      <td>0.5</td>
     </tr>
     <tr>
       <td>地方债NCD利差阈值_35/65</td>
       <td>单模块敏感性</td>
       <td>地方债NCD利差阈值</td>
       <td>35/65</td>
-      <td>35.0</td>
-      <td>65.0</td>
       <td>25.0</td>
       <td>75.0</td>
       <td>25.0</td>
       <td>75.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
       <td>35.0</td>
       <td>65.0</td>
-      <td>1.0</td>
+      <td>2.0</td>
       <td>30.0</td>
       <td>0</td>
       <td>0</td>
       <td>1</td>
-      <td>128.260571</td>
-      <td>12.22%</td>
-      <td>20.83%</td>
-      <td>-8.61%</td>
-      <td>2.71%</td>
-      <td>1.281303</td>
-      <td>-0.74%</td>
-      <td>102.46</td>
-      <td>104.58</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
-      <td>36</td>
-      <td>35</td>
-      <td>2.93</td>
-      <td>15.80</td>
-      <td>-3.43</td>
-      <td>-8.83</td>
+      <td>110.49050</td>
+      <td>13.25%</td>
+      <td>10.30%</td>
+      <td>2.94%</td>
+      <td>3.84%</td>
+      <td>2.019860</td>
+      <td>-1.17%</td>
+      <td>92.64</td>
+      <td>66.15</td>
+      <td>26.49</td>
+      <td>100.00%</td>
+      <td>13</td>
+      <td>12</td>
+      <td>7.06</td>
+      <td>7.06</td>
+      <td>42.20</td>
+      <td>0.11</td>
+      <td>-14.66</td>
       <td>1</td>
-      <td>-0.19</td>
-      <td>20.91%</td>
-      <td>35</td>
-      <td>0</td>
-      <td>0.026606</td>
-      <td>0.09092</td>
-      <td>70.0</td>
-      <td>1.0</td>
+      <td>7.905</td>
+      <td>64.29%</td>
+      <td>17</td>
+      <td>2</td>
+      <td>0.044053</td>
+      <td>0.081620</td>
+      <td>67.5</td>
+      <td>0.5</td>
     </tr>
     <tr>
-      <td>利差周变化阈值_±1BP</td>
-      <td>单模块敏感性</td>
-      <td>利差周变化阈值</td>
-      <td>±1BP</td>
-      <td>35.0</td>
-      <td>65.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>1.0</td>
-      <td>30.0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>128.260571</td>
-      <td>12.22%</td>
-      <td>20.83%</td>
-      <td>-8.61%</td>
-      <td>2.71%</td>
-      <td>1.281303</td>
-      <td>-0.74%</td>
-      <td>102.46</td>
-      <td>104.58</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
-      <td>36</td>
-      <td>35</td>
-      <td>2.93</td>
-      <td>15.80</td>
-      <td>-3.43</td>
-      <td>-8.83</td>
-      <td>1</td>
-      <td>-0.19</td>
-      <td>20.91%</td>
-      <td>35</td>
-      <td>0</td>
-      <td>0.026606</td>
-      <td>0.09092</td>
-      <td>70.0</td>
-      <td>1.0</td>
-    </tr>
-    <tr>
-      <td>看空<15_仅总分</td>
+      <td>看空<25_仅总分</td>
       <td>看空触发条件</td>
       <td>总分与确认规则</td>
       <td>仅总分</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>15.0</td>
+      <td>85.0</td>
       <td>35.0</td>
       <td>65.0</td>
+      <td>1.5</td>
       <td>25.0</td>
-      <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>1.0</td>
-      <td>15.0</td>
       <td>0</td>
       <td>0</td>
       <td>1</td>
-      <td>128.260571</td>
-      <td>12.22%</td>
-      <td>20.83%</td>
-      <td>-8.61%</td>
-      <td>2.71%</td>
-      <td>1.281303</td>
-      <td>-0.74%</td>
-      <td>102.46</td>
-      <td>104.58</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
-      <td>36</td>
-      <td>35</td>
-      <td>2.93</td>
-      <td>15.80</td>
-      <td>-3.43</td>
-      <td>-8.83</td>
+      <td>110.40475</td>
+      <td>13.33%</td>
+      <td>10.33%</td>
+      <td>3.00%</td>
+      <td>3.86%</td>
+      <td>2.011981</td>
+      <td>-1.17%</td>
+      <td>91.53</td>
+      <td>64.49</td>
+      <td>27.03</td>
+      <td>100.00%</td>
+      <td>9</td>
+      <td>8</td>
+      <td>10.30</td>
+      <td>10.30</td>
+      <td>44.74</td>
+      <td>0.41</td>
+      <td>-14.66</td>
       <td>1</td>
-      <td>-0.19</td>
-      <td>20.91%</td>
-      <td>13</td>
-      <td>0</td>
-      <td>0.026606</td>
-      <td>0.09092</td>
-      <td>70.0</td>
-      <td>1.0</td>
+      <td>9.155</td>
+      <td>66.67%</td>
+      <td>11</td>
+      <td>8</td>
+      <td>0.045650</td>
+      <td>0.080761</td>
+      <td>67.5</td>
+      <td>0.5</td>
     </tr>
     <tr>
-      <td>看空<15_至少2个模块利空</td>
+      <td>看空<25_至少2个模块利空</td>
       <td>看空触发条件</td>
       <td>总分与确认规则</td>
       <td>至少2个模块利空</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>15.0</td>
+      <td>85.0</td>
       <td>35.0</td>
       <td>65.0</td>
+      <td>1.5</td>
       <td>25.0</td>
-      <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>1.0</td>
-      <td>15.0</td>
       <td>2</td>
       <td>0</td>
       <td>1</td>
-      <td>128.260571</td>
-      <td>12.22%</td>
-      <td>20.83%</td>
-      <td>-8.61%</td>
-      <td>2.71%</td>
-      <td>1.281303</td>
-      <td>-0.74%</td>
-      <td>102.46</td>
-      <td>104.58</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
-      <td>36</td>
-      <td>35</td>
-      <td>2.93</td>
-      <td>15.80</td>
-      <td>-3.43</td>
-      <td>-8.83</td>
+      <td>110.40475</td>
+      <td>13.33%</td>
+      <td>10.33%</td>
+      <td>3.00%</td>
+      <td>3.86%</td>
+      <td>2.011981</td>
+      <td>-1.17%</td>
+      <td>91.53</td>
+      <td>64.49</td>
+      <td>27.03</td>
+      <td>100.00%</td>
+      <td>9</td>
+      <td>8</td>
+      <td>10.30</td>
+      <td>10.30</td>
+      <td>44.74</td>
+      <td>0.41</td>
+      <td>-14.66</td>
       <td>1</td>
-      <td>-0.19</td>
-      <td>20.91%</td>
-      <td>13</td>
-      <td>0</td>
-      <td>0.026606</td>
-      <td>0.09092</td>
-      <td>70.0</td>
-      <td>1.0</td>
+      <td>9.155</td>
+      <td>66.67%</td>
+      <td>11</td>
+      <td>8</td>
+      <td>0.045650</td>
+      <td>0.080761</td>
+      <td>67.5</td>
+      <td>0.5</td>
     </tr>
     <tr>
-      <td>看空<15_必须包含供给或需求利空</td>
-      <td>看空触发条件</td>
-      <td>总分与确认规则</td>
-      <td>必须包含供给或需求利空</td>
-      <td>35.0</td>
-      <td>65.0</td>
+      <td>利差周变化阈值_±1.5BP</td>
+      <td>单模块敏感性</td>
+      <td>利差周变化阈值</td>
+      <td>±1.5BP</td>
       <td>25.0</td>
       <td>75.0</td>
       <td>25.0</td>
       <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>1.0</td>
-      <td>15.0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>1</td>
-      <td>128.260571</td>
-      <td>12.22%</td>
-      <td>20.83%</td>
-      <td>-8.61%</td>
-      <td>2.71%</td>
-      <td>1.281303</td>
-      <td>-0.74%</td>
-      <td>102.46</td>
-      <td>104.58</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
-      <td>36</td>
-      <td>35</td>
-      <td>2.93</td>
-      <td>15.80</td>
-      <td>-3.43</td>
-      <td>-8.83</td>
-      <td>1</td>
-      <td>-0.19</td>
-      <td>20.91%</td>
-      <td>13</td>
-      <td>0</td>
-      <td>0.026606</td>
-      <td>0.09092</td>
-      <td>70.0</td>
-      <td>1.0</td>
-    </tr>
-    <tr>
-      <td>看空<15_至少2个模块且包含供需利空</td>
-      <td>看空触发条件</td>
-      <td>总分与确认规则</td>
-      <td>至少2个模块且包含供需利空</td>
-      <td>35.0</td>
-      <td>65.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>1.0</td>
-      <td>15.0</td>
-      <td>2</td>
-      <td>1</td>
-      <td>1</td>
-      <td>128.260571</td>
-      <td>12.22%</td>
-      <td>20.83%</td>
-      <td>-8.61%</td>
-      <td>2.71%</td>
-      <td>1.281303</td>
-      <td>-0.74%</td>
-      <td>102.46</td>
-      <td>104.58</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
-      <td>36</td>
-      <td>35</td>
-      <td>2.93</td>
-      <td>15.80</td>
-      <td>-3.43</td>
-      <td>-8.83</td>
-      <td>1</td>
-      <td>-0.19</td>
-      <td>20.91%</td>
-      <td>13</td>
-      <td>0</td>
-      <td>0.026606</td>
-      <td>0.09092</td>
-      <td>70.0</td>
-      <td>1.0</td>
-    </tr>
-    <tr>
-      <td>看空<15_连续2周看空</td>
-      <td>看空触发条件</td>
-      <td>总分与确认规则</td>
-      <td>连续2周看空</td>
-      <td>35.0</td>
-      <td>65.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>1.0</td>
-      <td>15.0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>2</td>
-      <td>128.260571</td>
-      <td>12.22%</td>
-      <td>20.83%</td>
-      <td>-8.61%</td>
-      <td>2.71%</td>
-      <td>1.281303</td>
-      <td>-0.74%</td>
-      <td>102.46</td>
-      <td>104.58</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
-      <td>36</td>
-      <td>35</td>
-      <td>2.93</td>
-      <td>15.80</td>
-      <td>-3.43</td>
-      <td>-8.83</td>
-      <td>1</td>
-      <td>-0.19</td>
-      <td>20.91%</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0.026606</td>
-      <td>0.09092</td>
-      <td>70.0</td>
-      <td>1.0</td>
-    </tr>
-    <tr>
-      <td>看空<20_仅总分</td>
-      <td>看空触发条件</td>
-      <td>总分与确认规则</td>
-      <td>仅总分</td>
-      <td>35.0</td>
-      <td>65.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>25.0</td>
-      <td>75.0</td>
-      <td>1.0</td>
       <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>1.5</td>
+      <td>30.0</td>
       <td>0</td>
       <td>0</td>
       <td>1</td>
-      <td>128.260571</td>
-      <td>12.22%</td>
-      <td>20.83%</td>
-      <td>-8.61%</td>
-      <td>2.71%</td>
-      <td>1.281303</td>
-      <td>-0.74%</td>
-      <td>102.46</td>
-      <td>104.58</td>
-      <td>-2.12</td>
-      <td>74.29%</td>
-      <td>36</td>
-      <td>35</td>
-      <td>2.93</td>
-      <td>15.80</td>
-      <td>-3.43</td>
-      <td>-8.83</td>
+      <td>110.26500</td>
+      <td>12.86%</td>
+      <td>9.68%</td>
+      <td>3.18%</td>
+      <td>3.73%</td>
+      <td>1.904878</td>
+      <td>-1.17%</td>
+      <td>88.35</td>
+      <td>59.33</td>
+      <td>29.02</td>
+      <td>100.00%</td>
+      <td>12</td>
+      <td>11</td>
+      <td>7.31</td>
+      <td>7.31</td>
+      <td>41.01</td>
+      <td>0.41</td>
+      <td>-14.66</td>
       <td>1</td>
-      <td>-0.19</td>
-      <td>20.91%</td>
+      <td>7.905</td>
+      <td>64.29%</td>
+      <td>16</td>
+      <td>1</td>
+      <td>0.044297</td>
+      <td>0.077948</td>
+      <td>67.5</td>
+      <td>0.5</td>
+    </tr>
+    <tr>
+      <td>地方债国债利差阈值_15/85</td>
+      <td>单模块敏感性</td>
+      <td>地方债国债利差阈值</td>
+      <td>15/85</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>15.0</td>
+      <td>85.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>30.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>109.91025</td>
+      <td>12.97%</td>
+      <td>10.04%</td>
+      <td>2.92%</td>
+      <td>3.76%</td>
+      <td>1.957048</td>
+      <td>-1.17%</td>
+      <td>89.84</td>
+      <td>63.44</td>
+      <td>26.41</td>
+      <td>100.00%</td>
+      <td>12</td>
+      <td>11</td>
+      <td>7.34</td>
+      <td>7.34</td>
+      <td>41.01</td>
+      <td>0.41</td>
+      <td>-14.66</td>
+      <td>1</td>
+      <td>9.155</td>
+      <td>64.29%</td>
+      <td>16</td>
+      <td>1</td>
+      <td>0.043882</td>
+      <td>0.079292</td>
+      <td>67.5</td>
+      <td>0.5</td>
+    </tr>
+    <tr>
+      <td>阈值原始基线</td>
+      <td>基线</td>
+      <td>全部</td>
+      <td>阈值原始基线</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>30.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>109.90025</td>
+      <td>12.86%</td>
+      <td>9.84%</td>
+      <td>3.02%</td>
+      <td>3.73%</td>
+      <td>1.915649</td>
+      <td>-1.17%</td>
+      <td>88.59</td>
+      <td>61.23</td>
+      <td>27.37</td>
+      <td>100.00%</td>
+      <td>12</td>
+      <td>11</td>
+      <td>7.34</td>
+      <td>7.34</td>
+      <td>41.01</td>
+      <td>0.41</td>
+      <td>-14.66</td>
+      <td>1</td>
+      <td>7.905</td>
+      <td>64.29%</td>
       <td>16</td>
       <td>0</td>
-      <td>0.026606</td>
-      <td>0.09092</td>
+      <td>0.044066</td>
+      <td>0.078159</td>
+      <td>67.5</td>
+      <td>0.5</td>
+    </tr>
+    <tr>
+      <td>供给分位阈值_25/75</td>
+      <td>单模块敏感性</td>
+      <td>供给分位阈值</td>
+      <td>25/75</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>30.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>109.90025</td>
+      <td>12.86%</td>
+      <td>9.84%</td>
+      <td>3.02%</td>
+      <td>3.73%</td>
+      <td>1.915649</td>
+      <td>-1.17%</td>
+      <td>88.59</td>
+      <td>61.23</td>
+      <td>27.37</td>
+      <td>100.00%</td>
+      <td>12</td>
+      <td>11</td>
+      <td>7.34</td>
+      <td>7.34</td>
+      <td>41.01</td>
+      <td>0.41</td>
+      <td>-14.66</td>
+      <td>1</td>
+      <td>7.905</td>
+      <td>64.29%</td>
+      <td>16</td>
+      <td>0</td>
+      <td>0.044066</td>
+      <td>0.078159</td>
+      <td>67.5</td>
+      <td>0.5</td>
+    </tr>
+    <tr>
+      <td>银行需求分位阈值_20/80</td>
+      <td>单模块敏感性</td>
+      <td>银行需求分位阈值</td>
+      <td>20/80</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>30.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>109.90025</td>
+      <td>12.86%</td>
+      <td>9.84%</td>
+      <td>3.02%</td>
+      <td>3.73%</td>
+      <td>1.915649</td>
+      <td>-1.17%</td>
+      <td>88.59</td>
+      <td>61.23</td>
+      <td>27.37</td>
+      <td>100.00%</td>
+      <td>12</td>
+      <td>11</td>
+      <td>7.34</td>
+      <td>7.34</td>
+      <td>41.01</td>
+      <td>0.41</td>
+      <td>-14.66</td>
+      <td>1</td>
+      <td>7.905</td>
+      <td>64.29%</td>
+      <td>16</td>
+      <td>0</td>
+      <td>0.044066</td>
+      <td>0.078159</td>
+      <td>67.5</td>
+      <td>0.5</td>
+    </tr>
+    <tr>
+      <td>银行需求分位阈值_25/75</td>
+      <td>单模块敏感性</td>
+      <td>银行需求分位阈值</td>
+      <td>25/75</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>30.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>109.90025</td>
+      <td>12.86%</td>
+      <td>9.84%</td>
+      <td>3.02%</td>
+      <td>3.73%</td>
+      <td>1.915649</td>
+      <td>-1.17%</td>
+      <td>88.59</td>
+      <td>61.23</td>
+      <td>27.37</td>
+      <td>100.00%</td>
+      <td>12</td>
+      <td>11</td>
+      <td>7.34</td>
+      <td>7.34</td>
+      <td>41.01</td>
+      <td>0.41</td>
+      <td>-14.66</td>
+      <td>1</td>
+      <td>7.905</td>
+      <td>64.29%</td>
+      <td>16</td>
+      <td>0</td>
+      <td>0.044066</td>
+      <td>0.078159</td>
+      <td>67.5</td>
+      <td>0.5</td>
+    </tr>
+    <tr>
+      <td>地方债国债利差阈值_20/80</td>
+      <td>单模块敏感性</td>
+      <td>地方债国债利差阈值</td>
+      <td>20/80</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>30.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>109.90025</td>
+      <td>12.86%</td>
+      <td>9.84%</td>
+      <td>3.02%</td>
+      <td>3.73%</td>
+      <td>1.915649</td>
+      <td>-1.17%</td>
+      <td>88.59</td>
+      <td>61.23</td>
+      <td>27.37</td>
+      <td>100.00%</td>
+      <td>12</td>
+      <td>11</td>
+      <td>7.34</td>
+      <td>7.34</td>
+      <td>41.01</td>
+      <td>0.41</td>
+      <td>-14.66</td>
+      <td>1</td>
+      <td>7.905</td>
+      <td>64.29%</td>
+      <td>16</td>
+      <td>0</td>
+      <td>0.044066</td>
+      <td>0.078159</td>
+      <td>67.5</td>
+      <td>0.5</td>
+    </tr>
+    <tr>
+      <td>地方债NCD利差阈值_25/75</td>
+      <td>单模块敏感性</td>
+      <td>地方债NCD利差阈值</td>
+      <td>25/75</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>30.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>109.90025</td>
+      <td>12.86%</td>
+      <td>9.84%</td>
+      <td>3.02%</td>
+      <td>3.73%</td>
+      <td>1.915649</td>
+      <td>-1.17%</td>
+      <td>88.59</td>
+      <td>61.23</td>
+      <td>27.37</td>
+      <td>100.00%</td>
+      <td>12</td>
+      <td>11</td>
+      <td>7.34</td>
+      <td>7.34</td>
+      <td>41.01</td>
+      <td>0.41</td>
+      <td>-14.66</td>
+      <td>1</td>
+      <td>7.905</td>
+      <td>64.29%</td>
+      <td>16</td>
+      <td>0</td>
+      <td>0.044066</td>
+      <td>0.078159</td>
+      <td>67.5</td>
+      <td>0.5</td>
+    </tr>
+    <tr>
+      <td>地方债NCD利差阈值_30/70</td>
+      <td>单模块敏感性</td>
+      <td>地方债NCD利差阈值</td>
+      <td>30/70</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>30.0</td>
       <td>70.0</td>
-      <td>1.0</td>
+      <td>2.0</td>
+      <td>30.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>109.90025</td>
+      <td>12.86%</td>
+      <td>9.84%</td>
+      <td>3.02%</td>
+      <td>3.73%</td>
+      <td>1.915649</td>
+      <td>-1.17%</td>
+      <td>88.59</td>
+      <td>61.23</td>
+      <td>27.37</td>
+      <td>100.00%</td>
+      <td>12</td>
+      <td>11</td>
+      <td>7.34</td>
+      <td>7.34</td>
+      <td>41.01</td>
+      <td>0.41</td>
+      <td>-14.66</td>
+      <td>1</td>
+      <td>7.905</td>
+      <td>64.29%</td>
+      <td>16</td>
+      <td>0</td>
+      <td>0.044066</td>
+      <td>0.078159</td>
+      <td>67.5</td>
+      <td>0.5</td>
+    </tr>
+    <tr>
+      <td>利差周变化阈值_±2BP</td>
+      <td>单模块敏感性</td>
+      <td>利差周变化阈值</td>
+      <td>±2BP</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>2.0</td>
+      <td>30.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>109.90025</td>
+      <td>12.86%</td>
+      <td>9.84%</td>
+      <td>3.02%</td>
+      <td>3.73%</td>
+      <td>1.915649</td>
+      <td>-1.17%</td>
+      <td>88.59</td>
+      <td>61.23</td>
+      <td>27.37</td>
+      <td>100.00%</td>
+      <td>12</td>
+      <td>11</td>
+      <td>7.34</td>
+      <td>7.34</td>
+      <td>41.01</td>
+      <td>0.41</td>
+      <td>-14.66</td>
+      <td>1</td>
+      <td>7.905</td>
+      <td>64.29%</td>
+      <td>16</td>
+      <td>0</td>
+      <td>0.044066</td>
+      <td>0.078159</td>
+      <td>67.5</td>
+      <td>0.5</td>
+    </tr>
+    <tr>
+      <td>20/80_x_20/80</td>
+      <td>关键模块交叉</td>
+      <td>地方债国债利差阈值 × 供给分位阈值</td>
+      <td>x_20/80</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>35.0</td>
+      <td>65.0</td>
+      <td>1.5</td>
+      <td>30.0</td>
+      <td>2</td>
+      <td>0</td>
+      <td>1</td>
+      <td>108.79600</td>
+      <td>12.75%</td>
+      <td>10.16%</td>
+      <td>2.59%</td>
+      <td>3.70%</td>
+      <td>1.924105</td>
+      <td>-1.17%</td>
+      <td>88.46</td>
+      <td>65.39</td>
+      <td>23.06</td>
+      <td>100.00%</td>
+      <td>13</td>
+      <td>12</td>
+      <td>6.75</td>
+      <td>6.75</td>
+      <td>38.76</td>
+      <td>0.11</td>
+      <td>-14.66</td>
+      <td>1</td>
+      <td>7.405</td>
+      <td>64.29%</td>
+      <td>17</td>
+      <td>7</td>
+      <td>0.043303</td>
+      <td>0.077980</td>
+      <td>67.5</td>
+      <td>0.5</td>
+    </tr>
+    <tr>
+      <td>15/85_x_20/80</td>
+      <td>关键模块交叉</td>
+      <td>地方债国债利差阈值 × 供给分位阈值</td>
+      <td>x_20/80</td>
+      <td>20.0</td>
+      <td>80.0</td>
+      <td>25.0</td>
+      <td>75.0</td>
+      <td>15.0</td>
+      <td>85.0</td>
+      <td>35.0</td>
+      <td>65.0</td>
+      <td>1.5</td>
+      <td>30.0</td>
+      <td>2</td>
+      <td>0</td>
+      <td>1</td>
+      <td>108.45050</td>
+      <td>12.96%</td>
+      <td>10.62%</td>
+      <td>2.34%</td>
+      <td>3.75%</td>
+      <td>1.984505</td>
+      <td>-1.17%</td>
+      <td>90.02</td>
+      <td>69.58</td>
+      <td>20.43</td>
+      <td>100.00%</td>
+      <td>12</td>
+      <td>11</td>
+      <td>7.40</td>
+      <td>7.40</td>
+      <td>39.76</td>
+      <td>0.11</td>
+      <td>-14.66</td>
+      <td>1</td>
+      <td>8.655</td>
+      <td>64.88%</td>
+      <td>15</td>
+      <td>10</td>
+      <td>0.043716</td>
+      <td>0.079374</td>
+      <td>67.5</td>
+      <td>0.5</td>
     </tr>
   </tbody>
 </table></div>
 <h2>如何解读</h2><p class="lead">单模块表同时展示资本利得BP、资本利得超额和逐笔胜率。目标函数改善为零的模块不应机械改阈值；只有形成稳定平台、而非单一尖峰的参数才值得保留。当前仍属于同一样本内研究，历史数据扩展完成前，不把结果视为样本外有效性证明。</p>
-</main></body></html>
+</main><section class='section'><h2>样本内外检验</h2><p>候选参数只按搜索期目标函数排序；样本外、2026年以来和全区间结果均不参与参数选择。</p><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>区间</th>
+      <th>起始日期</th>
+      <th>结束日期</th>
+      <th>累计资本利得_BP</th>
+      <th>年化资本利得_BP</th>
+      <th>条件基准资本利得_BP</th>
+      <th>资本利得超额_BP</th>
+      <th>年化资本利得超额_BP</th>
+      <th>已平仓胜率</th>
+      <th>已平仓交易数</th>
+      <th>平均单笔_BP</th>
+      <th>平均亏损_BP</th>
+      <th>资本利得最大回撤_BP</th>
+      <th>平均持有交易日</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>搜索期</td>
+      <td>2022-01-17</td>
+      <td>2025-06-30</td>
+      <td>94.345</td>
+      <td>28.541345</td>
+      <td>66.09</td>
+      <td>28.255</td>
+      <td>8.547731</td>
+      <td>1.0</td>
+      <td>12</td>
+      <td>7.099167</td>
+      <td>None</td>
+      <td>-14.660</td>
+      <td>57.692308</td>
+    </tr>
+    <tr>
+      <td>样本外</td>
+      <td>2025-07-01</td>
+      <td>2026-07-14</td>
+      <td>2.655</td>
+      <td>2.665578</td>
+      <td>-2.33</td>
+      <td>4.985</td>
+      <td>5.004861</td>
+      <td>1.0</td>
+      <td>2</td>
+      <td>1.087500</td>
+      <td>None</td>
+      <td>-12.885</td>
+      <td>81.000000</td>
+    </tr>
+    <tr>
+      <td>2026年以来</td>
+      <td>2026-01-01</td>
+      <td>2026-07-14</td>
+      <td>11.705</td>
+      <td>23.597280</td>
+      <td>2.73</td>
+      <td>8.975</td>
+      <td>18.093600</td>
+      <td>1.0</td>
+      <td>1</td>
+      <td>11.225000</td>
+      <td>None</td>
+      <td>-3.735</td>
+      <td>61.000000</td>
+    </tr>
+    <tr>
+      <td>全区间</td>
+      <td>2022-01-17</td>
+      <td>2026-07-14</td>
+      <td>96.875</td>
+      <td>22.500000</td>
+      <td>63.94</td>
+      <td>32.935</td>
+      <td>7.649419</td>
+      <td>1.0</td>
+      <td>14</td>
+      <td>6.885357</td>
+      <td>None</td>
+      <td>-14.660</td>
+      <td>66.200000</td>
+    </tr>
+  </tbody>
+</table><h2>Top候选稳定性</h2><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>指标</th>
+      <th>数值</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>年化资本利得衰减_BP</td>
+      <td>-25.875767</td>
+    </tr>
+    <tr>
+      <td>年化超额衰减_BP</td>
+      <td>-3.542871</td>
+    </tr>
+    <tr>
+      <td>样本外年化保留率</td>
+      <td>0.093394</td>
+    </tr>
+    <tr>
+      <td>样本外胜率变化</td>
+      <td>0.000000</td>
+    </tr>
+    <tr>
+      <td>样本外回撤变化_BP</td>
+      <td>1.775000</td>
+    </tr>
+    <tr>
+      <td>Top候选数</td>
+      <td>20.000000</td>
+    </tr>
+    <tr>
+      <td>样本外资本利得为正占比</td>
+      <td>0.900000</td>
+    </tr>
+    <tr>
+      <td>样本外超额为正占比</td>
+      <td>1.000000</td>
+    </tr>
+    <tr>
+      <td>样本外资本利得中位数_BP</td>
+      <td>7.670000</td>
+    </tr>
+    <tr>
+      <td>训练与样本外排名相关性</td>
+      <td>-0.018554</td>
+    </tr>
+    <tr>
+      <td>训练期第一名的样本外排名</td>
+      <td>14.000000</td>
+    </tr>
+  </tbody>
+</table><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>training_rank</th>
+      <th>training_objective</th>
+      <th>training_capital_gain_total_bp</th>
+      <th>training_capital_gain_excess_bp</th>
+      <th>oos_capital_gain_total_bp</th>
+      <th>oos_capital_gain_excess_bp</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>111.27275</td>
+      <td>94.345</td>
+      <td>28.255</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>110.85525</td>
+      <td>92.395</td>
+      <td>28.145</td>
+      <td>8.185</td>
+      <td>8.310</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>110.49050</td>
+      <td>92.640</td>
+      <td>26.490</td>
+      <td>7.945</td>
+      <td>8.665</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>110.40475</td>
+      <td>91.530</td>
+      <td>27.035</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>110.40475</td>
+      <td>91.530</td>
+      <td>27.035</td>
+      <td>2.655</td>
+      <td>4.985</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>110.26500</td>
+      <td>88.350</td>
+      <td>29.020</td>
+      <td>8.185</td>
+      <td>8.310</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>109.91025</td>
+      <td>89.845</td>
+      <td>26.405</td>
+      <td>2.410</td>
+      <td>4.695</td>
+    </tr>
+    <tr>
+      <td>11</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>12</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>13</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.400</td>
+      <td>7.900</td>
+    </tr>
+    <tr>
+      <td>14</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>16</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>17</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.945</td>
+      <td>8.665</td>
+    </tr>
+    <tr>
+      <td>18</td>
+      <td>109.90025</td>
+      <td>88.595</td>
+      <td>27.365</td>
+      <td>7.940</td>
+      <td>8.020</td>
+    </tr>
+    <tr>
+      <td>19</td>
+      <td>108.79600</td>
+      <td>88.455</td>
+      <td>23.060</td>
+      <td>-0.615</td>
+      <td>5.035</td>
+    </tr>
+    <tr>
+      <td>20</td>
+      <td>108.45050</td>
+      <td>90.015</td>
+      <td>20.430</td>
+      <td>-0.850</td>
+      <td>5.240</td>
+    </tr>
+  </tbody>
+</table></section></body></html>
