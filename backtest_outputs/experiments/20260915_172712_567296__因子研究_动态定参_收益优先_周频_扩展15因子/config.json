@@ -1,0 +1,147 @@
+{
+  "name": "因子研究_动态定参_收益优先_周频_扩展15因子",
+  "weights": {
+    "supply_amount": 0.0,
+    "supply_ratio": 10.0,
+    "supply_long": 0.0,
+    "fly_penalty": 0.0,
+    "bank_demand": 0.0,
+    "spread_gov": 0.0,
+    "spread_change": 5.0,
+    "spread_ncd": 5.0,
+    "nonbank_sentiment": 50.0
+  },
+  "thresholds": {
+    "supply_low": 25.0,
+    "supply_high": 75.0,
+    "demand_low": 25.0,
+    "demand_high": 75.0,
+    "spread_low": 20.0,
+    "spread_high": 80.0,
+    "ncd_low": 25.0,
+    "ncd_high": 75.0,
+    "spread_change_bp": 2.0
+  },
+  "factor_windows": {
+    "supply_months": 12,
+    "bank_months": 12,
+    "valuation_months": 12
+  },
+  "positions": {
+    "bullish_threshold": 70.0,
+    "bearish_threshold": 30.0,
+    "bullish_position": 1.0,
+    "neutral_position": 0.0,
+    "bearish_position": 0.0,
+    "bearish_min_core_factors": 0,
+    "bearish_require_supply_or_demand": 0,
+    "bearish_confirmation_periods": 1,
+    "take_profit_bp": 0.0,
+    "stop_loss_bp": 0.0
+  },
+  "objective": {
+    "total_return_weight": 0.0,
+    "excess_return_weight": 0.0,
+    "sharpe_weight": 0.0,
+    "signal_win_rate_weight": 0.0,
+    "capital_gain_bp_weight": 1.0,
+    "capital_gain_excess_bp_weight": 0.25,
+    "capital_trade_win_rate_weight": 10.0,
+    "capital_gain_avg_win_bp_weight": 0.0,
+    "capital_gain_drawdown_bp_penalty": 0.0
+  },
+  "backtest": {
+    "start_date": null,
+    "end_date": null
+  },
+  "benchmark": "local_gov_10y",
+  "signal_frequency": "weekly",
+  "研究溯源": {
+    "origin": {
+      "label": "因子增加研究统一起点"
+    },
+    "steps": [
+      {
+        "operation": "滚动定参",
+        "input": {
+          "label": "20260908_162211 已保存逐期结果"
+        },
+        "output": {
+          "label": "动态路线历史结果归档"
+        },
+        "training_end": "2024-01-17",
+        "signal_frequency": "weekly",
+        "search_version": "已保存的逐期权重与阈值",
+        "note": "本归档不重新搜索，仅封装此前已保存的逐段实际执行结果。"
+      },
+      {
+        "operation": "最终回测",
+        "input": {
+          "label": "动态路线历史结果归档"
+        },
+        "output": {
+          "label": "因子研究_动态定参_收益优先_周频_扩展15因子",
+          "path": "backtest_outputs/experiments/20260915_172712_567296__因子研究_动态定参_收益优先_周频_扩展15因子/config.json"
+        },
+        "training_start": null,
+        "training_end": null,
+        "signal_frequency": "weekly",
+        "search_version": "不适用",
+        "entrypoint": "common.runner.run_dashboard_config",
+        "arguments": {
+          "output_dir": "backtest_outputs\\experiments\\20260915_172712_567296__因子研究_动态定参_收益优先_周频_扩展15因子"
+        },
+        "changes": {},
+        "note": "因子研究已保存动态结果；实际回测 2024-01-18 至 2026-09-04；不重新选参。"
+      }
+    ],
+    "notes": [
+      "各期实际权重和阈值保存在原研究批次的滚动定参文件中；兼容配置中的权重不是固定执行参数。"
+    ],
+    "因子研究权重": {
+      "supply_amount": 0.0,
+      "supply_ratio": 10.0,
+      "supply_long": 0.0,
+      "bank_demand": 0.0,
+      "spread_gov": 0.0,
+      "spread_change": 5.0,
+      "spread_ncd": 5.0,
+      "nonbank_sentiment": 50.0,
+      "supply_amount_change": 10.0,
+      "bank_demand_change": 0.0,
+      "nonbank_sentiment_change": 0.0,
+      "spread_ncd_change": 15.0,
+      "spread_change_acceleration": 0.0,
+      "supply_bank_interaction": 0.0,
+      "supply_nonbank_interaction": 5.0
+    },
+    "事前停用因子": [],
+    "因子增加研究批次": "20260908_162211",
+    "因子增加研究路线": {
+      "目标": "收益",
+      "频率": "weekly",
+      "因子版本": "扩展因子",
+      "结果口径": "滚动样本外",
+      "事前启用因子": [
+        "supply_amount",
+        "supply_ratio",
+        "supply_long",
+        "bank_demand",
+        "spread_gov",
+        "spread_change",
+        "spread_ncd",
+        "nonbank_sentiment",
+        "supply_amount_change",
+        "bank_demand_change",
+        "nonbank_sentiment_change",
+        "spread_ncd_change",
+        "spread_change_acceleration",
+        "supply_bank_interaction",
+        "supply_nonbank_interaction"
+      ],
+      "首期训练截止日": "2024-01-17",
+      "末期训练截止日": "2026-07-16"
+    },
+    "研究类型": "因子增加滚动单一路线归档"
+  }
+}

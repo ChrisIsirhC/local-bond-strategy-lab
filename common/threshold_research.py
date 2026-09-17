@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from common.provenance import record_step
+
 import math
 from dataclasses import replace
 from itertools import product
@@ -22,7 +24,7 @@ from common.period_evaluation import (
 from common.reporting import _build_period_diagnostics, write_strategy_outputs
 from common.runner import run_dashboard_config
 from common.trade_metrics import apply_capital_stop_rules, vectorized_capital_trade_metrics
-from strategies.dashboard_signal_v1 import DashboardThresholds, DashboardWeights, signal_file_for_frequency
+from strategies.dashboard_signal_v1 import DashboardThresholds, DashboardWeights, FactorWindowConfig, _percentile_values, signal_file_for_frequency
 from strategies.position_policy import DashboardPositionPolicy
 
 
@@ -90,9 +92,13 @@ def run_threshold_research(
     root: Path,
     objective_config: ObjectiveConfig | None = None,
     base_config_override: DashboardStrategyConfig | None = None,
+    training_start: str | None = None,
     training_end: str = DEFAULT_TRAINING_END,
     archive_source: str = "阈值向量化搜索",
     final_strategy_name: str | None = None,
+    archive_result: bool = True,
+    research_metadata: dict[str, object] | None = None,
+    persist_artifacts: bool = True,
 ) -> dict[str, object]:
     selected_base = base_config_override or load_strategy_config(root / BASE_CONFIG)
     output_dir = root / (OUTPUT_DIR_DAILY if selected_base.signal_frequency == "daily" else OUTPUT_DIR)
@@ -103,13 +109,20 @@ def run_threshold_research(
         thresholds=selected_base.thresholds,
         positions=selected_base.positions,
         objective=objective_config or selected_base.objective,
+        factor_windows=selected_base.factor_windows,
         backtest_start=None,
         backtest_end=None,
         benchmark_id=GOV_10Y,
         signal_frequency=selected_base.signal_frequency,
     )
-    context = _build_search_context(root, end_date=training_end, signal_frequency=base_config.signal_frequency)
-    module_options = _module_options(context["factor_values"], base_config.thresholds)
+    context = _build_search_context(
+        root,
+        start_date=training_start,
+        end_date=training_end,
+        signal_frequency=base_config.signal_frequency,
+        factor_windows=base_config.factor_windows,
+    )
+    module_options = _training_module_options(context, base_config.thresholds)
 
     stage1_candidates = [_candidate(base_config, "阈值原始基线", "基线", "全部")]
     for module, options in module_options.items():
@@ -208,6 +221,16 @@ def run_threshold_research(
     if final_strategy_name:
         best_config = replace(best_config, name=final_strategy_name)
     best_config_path = root / "configs" / "experiments" / f"{_safe_config_name(best_config.name)}.json"
+    best_config = record_step(
+        selected_base, best_config, root, "阈值搜索", output_path=best_config_path,
+        training_start=training_start, training_end=training_end,
+        search_version="分阶段阈值/看空规则搜索（训练窗候选）",
+        entrypoint="common.threshold_research.run_threshold_research",
+        arguments={"training_start": training_start, "training_end": training_end,
+                   "objective_config": base_config.objective.as_dict(),
+                   "final_strategy_name": final_strategy_name, "archive_result": archive_result},
+        note=f"{archive_source}；固定输入权重，先单模块敏感性，再看空规则与关键模块交叉。",
+    )
     save_strategy_config(
         best_config,
         best_config_path,
@@ -217,43 +240,49 @@ def run_threshold_research(
     best_daily, best_signals, best_metrics, best_benchmark_metrics = run_dashboard_config(root, best_config)
     baseline_periods = evaluate_periods(baseline_daily, baseline_signals, training_end, baseline_benchmark_metrics["benchmark_name"])
     best_periods = evaluate_periods(best_daily, best_signals, training_end, best_benchmark_metrics["benchmark_name"])
-    write_strategy_outputs(
-        best_daily,
-        best_signals,
-        best_metrics,
-        best_benchmark_metrics,
-        output_dir / "最佳阈值策略报告",
-    )
+    if persist_artifacts:
+        write_strategy_outputs(
+            best_daily,
+            best_signals,
+            best_metrics,
+            best_benchmark_metrics,
+            output_dir / "最佳阈值策略报告",
+        )
     export = _export_results(results)
-    export.to_csv(output_dir / "全部阈值实验结果.csv", index=False, encoding="utf-8-sig")
-    export.head(100).to_csv(output_dir / "阈值实验Top100.csv", index=False, encoding="utf-8-sig")
     module_summary = _module_summary(stage1, base_config.thresholds)
-    module_summary.to_csv(output_dir / "单模块敏感性汇总.csv", index=False, encoding="utf-8-sig")
     diagnostics = _compare_diagnostics(
         _build_period_diagnostics(baseline_daily, baseline_signals),
         _build_period_diagnostics(best_daily, best_signals),
     )
-    diagnostics.to_csv(output_dir / "最佳阈值相对基线_错判变化.csv", index=False, encoding="utf-8-sig")
-    _write_html_report(
-        results,
-        module_summary,
-        diagnostics,
-        base_config,
-        best_config,
-        baseline_periods["搜索期"]["strategy_metrics"],
-        best_periods["搜索期"]["strategy_metrics"],
-        best_periods["搜索期"]["benchmark_metrics"],
-        output_dir / "阈值调参报告.html",
-    )
-    experiment_dir = archive_dashboard_experiment(
-        root,
-        best_config,
-        best_daily,
-        best_signals,
-        best_metrics,
-        best_benchmark_metrics,
-        source=archive_source,
-        research_metadata={"训练截止日": training_end, "样本外起始日": (pd.Timestamp(training_end) + pd.Timedelta(days=1)).date().isoformat()},
+    if persist_artifacts:
+        export.to_csv(output_dir / "全部阈值实验结果.csv", index=False, encoding="utf-8-sig")
+        export.head(100).to_csv(output_dir / "阈值实验Top100.csv", index=False, encoding="utf-8-sig")
+        module_summary.to_csv(output_dir / "单模块敏感性汇总.csv", index=False, encoding="utf-8-sig")
+        diagnostics.to_csv(output_dir / "最佳阈值相对基线_错判变化.csv", index=False, encoding="utf-8-sig")
+        _write_html_report(
+            results,
+            module_summary,
+            diagnostics,
+            base_config,
+            best_config,
+            baseline_periods["搜索期"]["strategy_metrics"],
+            best_periods["搜索期"]["strategy_metrics"],
+            best_periods["搜索期"]["benchmark_metrics"],
+            output_dir / "阈值调参报告.html",
+        )
+    experiment_dir = (
+        archive_dashboard_experiment(
+            root,
+            best_config,
+            best_daily,
+            best_signals,
+            best_metrics,
+            best_benchmark_metrics,
+            source=archive_source,
+            research_metadata={**(research_metadata or {}), "训练起始日": training_start, "训练截止日": training_end, "样本外起始日": (pd.Timestamp(training_end) + pd.Timedelta(days=1)).date().isoformat()},
+        )
+        if archive_result
+        else None
     )
     period_frame = period_summary_frame(best_periods)
     top_training = results.head(20).reset_index(drop=True)
@@ -261,6 +290,7 @@ def run_threshold_research(
         root,
         start_date=(pd.Timestamp(training_end) + pd.Timedelta(days=1)).date().isoformat(),
         signal_frequency=base_config.signal_frequency,
+        factor_windows=base_config.factor_windows,
     )
     if len(oos_context["daily"]) and not top_training.empty:
         oos_results, _ = _evaluate_candidates(
@@ -277,9 +307,11 @@ def run_threshold_research(
     stability = top_stability_summary(stability_frame)
     period_frame.to_csv(output_dir / "最优策略_分区间表现.csv", index=False, encoding="utf-8-sig")
     stability_frame.to_csv(output_dir / "Top候选_样本外稳定性.csv", index=False, encoding="utf-8-sig")
-    period_frame.to_csv(experiment_dir / "period_evaluation.csv", index=False, encoding="utf-8-sig")
-    stability_frame.to_csv(experiment_dir / "top_stability.csv", index=False, encoding="utf-8-sig")
-    append_search_evaluation_html(output_dir / "阈值调参报告.html", period_frame, stability_frame, generalization, stability)
+    if experiment_dir is not None:
+        period_frame.to_csv(experiment_dir / "period_evaluation.csv", index=False, encoding="utf-8-sig")
+        stability_frame.to_csv(experiment_dir / "top_stability.csv", index=False, encoding="utf-8-sig")
+    if persist_artifacts:
+        append_search_evaluation_html(output_dir / "阈值调参报告.html", period_frame, stability_frame, generalization, stability)
     return {
         **best_metrics,
         "strategy_name": best_config.name,
@@ -289,8 +321,9 @@ def run_threshold_research(
         "candidate_count": int(len(results)),
         "best_config_path": str(best_config_path),
         "report_path": str(output_dir / "阈值调参报告.html"),
-        "experiment_dir": str(experiment_dir),
+        "experiment_dir": str(experiment_dir) if experiment_dir is not None else None,
         "training_end": training_end,
+        "training_start": training_start,
         "period_evaluation": period_frame.to_dict(orient="records"),
         "generalization": generalization,
         "stability": stability,
@@ -303,20 +336,22 @@ def _build_search_context(
     start_date: str | None = None,
     end_date: str | None = None,
     signal_frequency: str = "weekly",
+    factor_windows: FactorWindowConfig | None = None,
 ) -> dict[str, object]:
     signal_path = root / signal_file_for_frequency(signal_frequency)
     raw = pd.read_csv(signal_path, encoding="utf-8-sig")
+    percentiles = _percentile_values(raw, factor_windows)
     factor_values = pd.DataFrame(
         {
             "signal_date": pd.to_datetime(raw["信号日期"]),
-            "supply_amount": _pct_to_100(raw["未来一周地方债发行量_1年内滚动分位数"]),
-            "supply_ratio": _pct_to_100(raw["未来一周地方债发行量/（国债发行量+地方债发行量）_1年内滚动分位数"]),
-            "supply_long": _pct_to_100(raw["地方债发行10年以上绝对发行量_1年内滚动分位数"]),
+            "supply_amount": percentiles["supply_amount"],
+            "supply_ratio": percentiles["supply_ratio"],
+            "supply_long": percentiles["supply_long"],
             "fly": np.zeros(len(raw), dtype=bool),
-            "bank": _pct_to_100(raw["银行过去一周净买入金额_1Y滚动分位数"]),
-            "spread": _pct_to_100(raw["10年好地区一般债-10年国债活跃券利差_1年内滚动分位数"]),
+            "bank": percentiles["bank"],
+            "spread": percentiles["spread"],
             "spread_change": pd.to_numeric(raw["上述利差周度变化情况"], errors="coerce"),
-            "ncd": _pct_to_100(raw["10年好地区一般债-1年国股行NCD利差_1年内滚动分位数"]),
+            "ncd": percentiles["ncd"],
             "nonbank": pd.to_numeric(raw["基煜纯债基金周度净申购情况"], errors="coerce"),
         }
     ).sort_values("signal_date").reset_index(drop=True)
@@ -326,6 +361,7 @@ def _build_search_context(
         market = market.loc[market["date"] >= pd.Timestamp(start_date)].copy()
     if end_date:
         market = market.loc[market["date"] <= pd.Timestamp(end_date)].copy()
+    market = market.loc[market["date"] <= factor_values["signal_date"].max()].copy()
     mapping = factor_values[["signal_date"]].reset_index(names="signal_index")
     daily = pd.merge_asof(
         market.sort_values("date"),
@@ -339,6 +375,14 @@ def _build_search_context(
         "daily": daily,
         "signal_index": daily["signal_index"].astype(int).to_numpy(),
     }
+
+
+def _training_module_options(context: dict[str, object], base: DashboardThresholds):
+    # Only signals actually used by training returns may shape the candidate grid.
+    indices = np.unique(context["signal_index"])
+    if not len(indices):
+        raise ValueError("训练窗口没有可用信号")
+    return _module_options(context["factor_values"].iloc[indices], base)
 
 
 def _module_options(values: pd.DataFrame, base: DashboardThresholds) -> dict[str, list[tuple[str, dict[str, float]]]]:
@@ -635,6 +679,7 @@ def _config_from_result(base: DashboardStrategyConfig, row: pd.Series) -> Dashbo
         thresholds=thresholds,
         positions=positions,
         objective=base.objective,
+        factor_windows=base.factor_windows,
         benchmark_id=GOV_10Y,
         signal_frequency=base.signal_frequency,
     )

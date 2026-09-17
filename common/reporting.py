@@ -30,7 +30,7 @@ METRIC_LABELS = {
     "winning_signal_periods": "盈利调仓周期数",
     "signal_period_win_rate": "调仓周期胜率",
     "avg_signal_period_return": "单周期平均收益",
-    "capital_gain_total_bp": "累计资本利得_BP（收益率变动）",
+    "capital_gain_total_bp": "累计资本利得_BP",
     "capital_gain_annualized_bp": "年化资本利得_BP",
     "capital_gain_trade_count": "资本利得交易笔数",
     "capital_gain_closed_trade_count": "已平仓交易笔数",
@@ -566,7 +566,7 @@ def _write_strategy_html_report(
 
   <div class="grid">
     <div class="card"><div class="label">区间</div><div class="value">{strategy_metrics['start_date']} 至 {strategy_metrics['end_date']}</div></div>
-    <div class="card"><div class="label">累计资本利得（收益率变动）</div><div class="value">{strategy_metrics['capital_gain_total_bp']:.2f} BP</div></div>
+    <div class="card"><div class="label">累计资本利得</div><div class="value">{strategy_metrics['capital_gain_total_bp']:.2f} BP</div></div>
     <div class="card"><div class="label">已平仓交易胜率</div><div class="value">{_format_metric(strategy_metrics['capital_gain_trade_win_rate'], True) or '暂无已平仓'}</div></div>
     <div class="card"><div class="label">平均每笔盈利 / 平均每笔亏损</div><div class="value">{_format_metric(strategy_metrics['capital_gain_avg_win_bp']) or '-'} / {_format_metric(strategy_metrics['capital_gain_avg_loss_bp']) or '-'} BP</div></div>
   </div>
@@ -657,8 +657,8 @@ def _strategy_charts_html(daily: pd.DataFrame) -> str:
     capital_bp_line = (
         Line(init_opts=opts.InitOpts(width="100%", height="500px"))
         .add_xaxis(dates)
-        .add_yaxis("策略累计资本利得（收益率变动）", strategy_capital_cum_bp, is_symbol_show=False, color="#bb654f")
-        .add_yaxis("基准累计资本利得（收益率变动）", benchmark_capital_cum_bp, is_symbol_show=False, color="#176b5b")
+        .add_yaxis("策略累计资本利得", strategy_capital_cum_bp, is_symbol_show=False, color="#bb654f")
+        .add_yaxis("基准累计资本利得", benchmark_capital_cum_bp, is_symbol_show=False, color="#176b5b")
         .add_yaxis("资本利得超额", capital_excess_cum_bp, is_symbol_show=False, color="#9a7b38", linestyle_opts=opts.LineStyleOpts(type_="dashed"))
         .set_global_opts(
             title_opts=opts.TitleOpts(title="收益率资本利得交易曲线（BP，不乘久期）"),

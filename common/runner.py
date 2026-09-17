@@ -7,6 +7,8 @@ import pandas as pd
 
 from common.bond_return import BondReturnConfig, build_total_return_index, load_yield_curve
 from common.config import DashboardStrategyConfig, ObjectiveConfig, save_strategy_config
+from common.provenance import record_step
+from common.data_quality import assert_no_long_date_gaps
 from common.experiments import archive_dashboard_experiment
 from common.market_data import CONDITIONAL_BENCHMARK_ID, CONDITIONAL_BENCHMARK_NAME, DEFAULT_BENCHMARK_ID, GOV_10Y, curve_path, load_market_data
 from common.performance import performance_metrics
@@ -20,8 +22,8 @@ from common.period_evaluation import (
 )
 from common.reporting import write_outputs, write_strategy_outputs
 from common.trade_metrics import apply_capital_stop_rules, capital_gain_trade_metrics, vectorized_capital_trade_metrics
-from strategies.dashboard_signal_v1 import DEFAULT_THRESHOLDS, DashboardThresholds, DashboardWeights, WEIGHT_COLUMNS, build_dashboard_factor_multipliers, build_dashboard_signal
-from strategies.dashboard_weight_search_v1 import generate_weight_candidates
+from strategies.dashboard_signal_v1 import DEFAULT_FACTOR_WINDOWS, DEFAULT_THRESHOLDS, DashboardThresholds, DashboardWeights, FactorWindowConfig, WEIGHT_COLUMNS, build_dashboard_factor_multipliers, build_dashboard_signal
+from strategies.dashboard_weight_search_v1 import generate_weight_candidates, generate_weight_candidates_v2
 from strategies.position_policy import DEFAULT_POSITION_POLICY
 
 
@@ -39,6 +41,8 @@ def run_dashboard_signal_v1(root: Path) -> dict[str, object]:
     output_dir = root / "backtest_outputs" / "dashboard_signal_v1"
     market = load_market_data(root, GOV_10Y)
     signals = build_dashboard_signal(root)
+    assert_no_long_date_gaps(market, "date", "看板回测市场行情")
+    assert_no_long_date_gaps(signals, "signal_date", "看板回测信号", max_gap_days=28)
 
     daily, strategy_metrics, benchmark_metrics = _backtest_dashboard_signals(market, signals)
     write_strategy_outputs(daily, signals, strategy_metrics, benchmark_metrics, output_dir)
@@ -53,8 +57,16 @@ def run_dashboard_config(
     market = load_market_data(root, GOV_10Y)
     market = _apply_configured_backtest_window(market, config)
     signals = build_dashboard_signal(
-        root, config.weights, config.thresholds, config.positions, config.signal_frequency
+        root,
+        weights=config.weights,
+        thresholds=config.thresholds,
+        position_policy=config.positions,
+        factor_windows=config.factor_windows,
+        signal_frequency=config.signal_frequency,
     )
+    assert_no_long_date_gaps(market, "date", f"{config.name} 市场行情")
+    signal_gap_limit = 14 if config.signal_frequency == "daily" else 28
+    assert_no_long_date_gaps(signals, "signal_date", f"{config.name} 策略信号", max_gap_days=signal_gap_limit)
     daily, strategy_metrics, benchmark_metrics = _backtest_dashboard_signals(market, signals, config.positions)
     if output_dir is not None:
         write_strategy_outputs(daily, signals, strategy_metrics, benchmark_metrics, output_dir)
@@ -79,12 +91,23 @@ def _apply_configured_backtest_window(
     return selected.reset_index(drop=True)
 
 
+def _signal_coverage_end(signals: pd.DataFrame) -> pd.Timestamp:
+    """Return the final date covered by the last signal, including weekly applicability."""
+    signal_end = pd.to_datetime(signals["signal_date"], errors="coerce").max()
+    if "信号适用结束日期" in signals.columns:
+        applicable_end = pd.to_datetime(signals["信号适用结束日期"], errors="coerce").max()
+        if pd.notna(applicable_end):
+            signal_end = max(signal_end, applicable_end)
+    return signal_end
+
+
 def _backtest_dashboard_signals(
     market: pd.DataFrame,
     signals: pd.DataFrame,
     position_policy=DEFAULT_POSITION_POLICY,
 ) -> tuple[pd.DataFrame, dict[str, object], dict[str, object]]:
-    daily = market.copy()
+    signal_end = _signal_coverage_end(signals)
+    daily = market.loc[market["date"] <= signal_end].copy()
     signal_for_merge = signals[["signal_date", "总分", "结论", "仓位"]].copy()
     daily = pd.merge_asof(
         daily.sort_values("date"),
@@ -177,64 +200,157 @@ def run_dashboard_weight_search_v1(
     root: Path,
     objective_config: ObjectiveConfig | None = None,
     base_config: DashboardStrategyConfig | None = None,
+    training_start: str | None = None,
     training_end: str = DEFAULT_TRAINING_END,
     archive_result: bool = True,
+    persist_artifacts: bool = True,
+) -> dict[str, object]:
+    return _run_dashboard_weight_search(
+        root,
+        objective_config=objective_config,
+        base_config=base_config,
+        training_start=training_start,
+        training_end=training_end,
+        archive_result=archive_result,
+        persist_artifacts=persist_artifacts,
+        search_version="v1",
+    )
+
+
+def run_dashboard_weight_search_v2(
+    root: Path,
+    objective_config: ObjectiveConfig | None = None,
+    base_config: DashboardStrategyConfig | None = None,
+    training_start: str | None = None,
+    training_end: str = DEFAULT_TRAINING_END,
+    archive_result: bool = True,
+    persist_artifacts: bool = True,
+) -> dict[str, object]:
+    return _run_dashboard_weight_search(
+        root,
+        objective_config=objective_config,
+        base_config=base_config,
+        training_start=training_start,
+        training_end=training_end,
+        archive_result=archive_result,
+        persist_artifacts=persist_artifacts,
+        search_version="v2",
+    )
+
+
+def _run_dashboard_weight_search(
+    root: Path,
+    objective_config: ObjectiveConfig | None = None,
+    base_config: DashboardStrategyConfig | None = None,
+    training_start: str | None = None,
+    training_end: str = DEFAULT_TRAINING_END,
+    archive_result: bool = True,
+    search_version: str = "v1",
+    persist_artifacts: bool = True,
 ) -> dict[str, object]:
     signal_frequency = base_config.signal_frequency if base_config is not None else "weekly"
-    output_name = "dashboard_weight_search_v1_daily" if signal_frequency == "daily" else "dashboard_weight_search_v1"
+    if search_version not in {"v1", "v2"}:
+        raise ValueError(f"unsupported weight search version: {search_version}")
+    output_name = (
+        f"dashboard_weight_search_{search_version}_daily"
+        if signal_frequency == "daily"
+        else f"dashboard_weight_search_{search_version}"
+    )
     output_dir = root / "backtest_outputs" / output_name
     output_dir.mkdir(parents=True, exist_ok=True)
     market = load_market_data(root, GOV_10Y)
-    training_market = market.loc[market["date"] <= pd.Timestamp(training_end)].copy().reset_index(drop=True)
+    training_market = market.loc[market["date"] <= pd.Timestamp(training_end)].copy()
+    if training_start is not None:
+        training_market = training_market.loc[training_market["date"] >= pd.Timestamp(training_start)].copy()
+    training_market = training_market.reset_index(drop=True)
     if training_market.empty:
         raise ValueError("训练截止日前没有可用数据")
-    candidates = generate_weight_candidates()
+    candidates = generate_weight_candidates_v2() if search_version == "v2" else generate_weight_candidates()
     objective = objective_config or ObjectiveConfig()
     search_thresholds = base_config.thresholds if base_config is not None else DEFAULT_THRESHOLDS
     search_positions = base_config.positions if base_config is not None else DEFAULT_POSITION_POLICY
+    factor_windows = base_config.factor_windows if base_config is not None else DEFAULT_FACTOR_WINDOWS
     results, best_weights = _run_weight_search_fast(
-        root, training_market, candidates, search_thresholds, search_positions, objective, signal_frequency=signal_frequency
+        root,
+        training_market,
+        candidates,
+        search_thresholds,
+        search_positions,
+        objective,
+        factor_windows=factor_windows,
+        signal_frequency=signal_frequency,
     )
 
     results = results.sort_values(
         ["objective", "strategy_total_return", "excess_total_return"],
         ascending=False,
     )
-    results.to_csv(output_dir / "all_results.csv", index=False, encoding="utf-8-sig")
-    results.head(100).to_csv(output_dir / "top_configs.csv", index=False, encoding="utf-8-sig")
-    _write_search_summary(
-        results,
-        output_dir / "权重搜索报告.html",
-        search_thresholds,
-        search_positions,
-        objective,
-        signal_frequency,
-    )
+    results["供给模块总权重"] = results[["supply_amount", "supply_ratio", "supply_long"]].sum(axis=1)
+    results["需求模块总权重"] = results["bank_demand"]
+    results["估值模块总权重"] = results[["spread_gov", "spread_change", "spread_ncd"]].sum(axis=1)
+    results["非银模块总权重"] = results["nonbank_sentiment"]
+    if persist_artifacts:
+        results.to_csv(output_dir / "all_results.csv", index=False, encoding="utf-8-sig")
+        results.head(100).to_csv(output_dir / "top_configs.csv", index=False, encoding="utf-8-sig")
+        _write_search_summary(
+            results,
+            output_dir / "权重搜索报告.html",
+            search_thresholds,
+            search_positions,
+            objective,
+            signal_frequency,
+            search_version,
+        )
 
     if best_weights is None:
         raise RuntimeError("weight search produced no candidates")
     best_signals = build_dashboard_signal(
-        root, best_weights, search_thresholds, search_positions, signal_frequency
+        root,
+        weights=best_weights,
+        thresholds=search_thresholds,
+        position_policy=search_positions,
+        factor_windows=factor_windows,
+        signal_frequency=signal_frequency,
     )
     best_daily, best_strategy_metrics, best_benchmark_metrics = _backtest_dashboard_signals(market, best_signals)
+    best_strategy_metrics["capital_gain_excess_bp"] = (
+        float(best_strategy_metrics["capital_gain_total_bp"])
+        - float(best_benchmark_metrics["capital_gain_total_bp"])
+    )
     best_config = DashboardStrategyConfig(
-        name=_weight_search_strategy_name(best_weights, signal_frequency),
+        name=_weight_search_strategy_name(best_weights, signal_frequency, search_version),
         weights=best_weights,
         thresholds=search_thresholds,
         positions=search_positions,
         objective=objective,
+        factor_windows=factor_windows,
         benchmark_id=GOV_10Y,
         signal_frequency=signal_frequency,
     )
     best_config_path = root / "configs" / "experiments" / f"{best_config.name}.json"
-    save_strategy_config(best_config, best_config_path)
-    write_strategy_outputs(
-        best_daily,
-        best_signals,
-        best_strategy_metrics,
-        best_benchmark_metrics,
-        output_dir / "best_config_report",
+    provenance_source = base_config or DashboardStrategyConfig(
+        name="内置权重搜索起点", weights=DashboardWeights(), thresholds=search_thresholds,
+        positions=search_positions, objective=objective, factor_windows=factor_windows,
+        benchmark_id=GOV_10Y, signal_frequency=signal_frequency,
     )
+    best_config = record_step(
+        provenance_source, best_config, root, f"{search_version.upper()} 权重搜索",
+        output_path=best_config_path, training_start=training_start, training_end=training_end,
+        search_version=search_version, entrypoint=f"common.runner.run_dashboard_weight_search_{search_version}",
+        arguments={"training_start": training_start, "training_end": training_end,
+                   "objective_config": objective.as_dict(), "archive_result": archive_result},
+        note="固定输入阈值、仓位规则和因子窗口；V2 模块上限50、步长5、总和100、发飞0，可零权重。"
+             if search_version == "v2" else "候选按 strategies.dashboard_weight_search_v1.generate_weight_candidates 生成。",
+    )
+    save_strategy_config(best_config, best_config_path)
+    if persist_artifacts:
+        write_strategy_outputs(
+            best_daily,
+            best_signals,
+            best_strategy_metrics,
+            best_benchmark_metrics,
+            output_dir / "best_config_report",
+        )
     experiment_dir = (
         archive_dashboard_experiment(
             root,
@@ -243,8 +359,8 @@ def run_dashboard_weight_search_v1(
             best_signals,
             best_strategy_metrics,
             best_benchmark_metrics,
-            source="权重向量化搜索",
-            research_metadata={"训练截止日": training_end, "样本外起始日": (pd.Timestamp(training_end) + pd.Timedelta(days=1)).date().isoformat()},
+            source=f"权重向量化搜索{search_version}",
+            research_metadata={"训练起始日": training_start, "训练截止日": training_end, "样本外起始日": (pd.Timestamp(training_end) + pd.Timedelta(days=1)).date().isoformat(), "搜索版本": search_version, "模块最低权重": "无" if search_version == "v2" else "有", "模块单类上限": 50 if search_version == "v2" else "按v1规则"},
         )
         if archive_result
         else None
@@ -259,6 +375,7 @@ def run_dashboard_weight_search_v1(
     if not oos_market.empty and top_candidates:
         oos_results, _ = _run_weight_search_fast(
             root, oos_market, top_candidates, search_thresholds, search_positions, objective,
+            factor_windows=factor_windows,
             signal_frequency=signal_frequency,
         )
         stability_frame = results.head(len(oos_results))[["objective", "capital_gain_total_bp", "capital_gain_excess_bp"]].reset_index(drop=True)
@@ -270,29 +387,34 @@ def run_dashboard_weight_search_v1(
         stability_frame = pd.DataFrame()
     generalization = generalization_summary(periods)
     stability = top_stability_summary(stability_frame)
-    period_frame.to_csv(output_dir / "最优策略_分区间表现.csv", index=False, encoding="utf-8-sig")
-    stability_frame.to_csv(output_dir / "Top候选_样本外稳定性.csv", index=False, encoding="utf-8-sig")
+    if persist_artifacts:
+        period_frame.to_csv(output_dir / "最优策略_分区间表现.csv", index=False, encoding="utf-8-sig")
+        stability_frame.to_csv(output_dir / "Top候选_样本外稳定性.csv", index=False, encoding="utf-8-sig")
     if experiment_dir is not None:
         period_frame.to_csv(experiment_dir / "period_evaluation.csv", index=False, encoding="utf-8-sig")
         stability_frame.to_csv(experiment_dir / "top_stability.csv", index=False, encoding="utf-8-sig")
-    append_search_evaluation_html(output_dir / "权重搜索报告.html", period_frame, stability_frame, generalization, stability)
+    if persist_artifacts:
+        append_search_evaluation_html(output_dir / "权重搜索报告.html", period_frame, stability_frame, generalization, stability)
     return {
         **best_strategy_metrics,
         "strategy_name": best_config.name,
         "best_config_path": str(best_config_path),
         "experiment_dir": str(experiment_dir) if experiment_dir is not None else None,
         "training_end": training_end,
+        "training_start": training_start,
+        "search_version": search_version,
+        "candidate_count": len(candidates),
         "period_evaluation": period_frame.to_dict(orient="records"),
         "generalization": generalization,
         "stability": stability,
     }
 
 
-def _weight_search_strategy_name(weights: DashboardWeights, signal_frequency: str = "weekly") -> str:
+def _weight_search_strategy_name(weights: DashboardWeights, signal_frequency: str = "weekly", search_version: str = "v1") -> str:
     values = weights.as_dict()
     number = lambda value: f"{float(value):g}"
     return (
-        f"{'日频' if signal_frequency == 'daily' else '周频'}权重搜索最优_"
+        f"{'日频' if signal_frequency == 'daily' else '周频'}权重搜索{search_version}最优_"
         f"供给{number(values['supply_amount'])}-{number(values['supply_ratio'])}-{number(values['supply_long'])}_"
         f"发飞停用_需求{number(values['bank_demand'])}_"
         f"估值{number(values['spread_gov'])}-{number(values['spread_change'])}-{number(values['spread_ncd'])}_"
@@ -307,10 +429,17 @@ def _run_weight_search_fast(
     thresholds: DashboardThresholds = DEFAULT_THRESHOLDS,
     position_policy = DEFAULT_POSITION_POLICY,
     objective_config: ObjectiveConfig = ObjectiveConfig(),
+    factor_windows: FactorWindowConfig = DEFAULT_FACTOR_WINDOWS,
     chunk_size: int = 5000,
     signal_frequency: str = "weekly",
 ) -> tuple[pd.DataFrame, DashboardWeights | None]:
-    multipliers = build_dashboard_factor_multipliers(root, thresholds, signal_frequency)
+    multipliers = build_dashboard_factor_multipliers(
+        root,
+        thresholds=thresholds,
+        factor_windows=factor_windows,
+        signal_frequency=signal_frequency,
+    )
+    market = market.loc[market["date"] <= pd.to_datetime(multipliers["signal_date"], errors="coerce").max()].copy()
     signal_for_merge = multipliers[["signal_date"]].copy()
     daily = pd.merge_asof(
         market.sort_values("date"),
@@ -450,15 +579,16 @@ def _write_search_summary(
     position_policy,
     objective_config: ObjectiveConfig,
     signal_frequency: str = "weekly",
+    search_version: str = "v1",
 ) -> None:
     from pyecharts import options as opts
     from pyecharts.charts import Bar, Scatter
     from pyecharts.globals import CurrentConfig
 
     labels = {
-        "supply_amount": "供给/发行量",
-        "supply_ratio": "供给/发行占比",
-        "supply_long": "供给/10Y以上发行",
+        "supply_amount": "供给|发行量",
+        "supply_ratio": "供给|发行占比",
+        "supply_long": "供给|10Y以上发行",
         "fly_penalty": "发飞惩罚（停用）",
         "bank_demand": "银行需求",
         "spread_gov": "地方债-国债利差",
@@ -603,10 +733,10 @@ def _write_search_summary(
 <style>
 body{{margin:0;background:#f3f2ed;color:#18201d;font-family:Geist,"Microsoft YaHei",sans-serif}}main{{max-width:1280px;margin:auto;padding:48px 28px 80px}}h1{{font-size:38px;margin:0 0 14px}}h2{{margin-top:52px}}h3{{margin:28px 0 12px}}.lead{{color:#66716c;max-width:980px;line-height:1.8}}.metrics{{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid #cfd5d1;border-bottom:1px solid #cfd5d1;margin:30px 0}}.metric{{padding:22px 18px;border-right:1px solid #cfd5d1}}.metric:last-child{{border:0}}.metric b{{display:block;font-size:25px;color:#bb654f;margin-top:8px}}.steps{{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#d9ddd8;border:1px solid #d9ddd8}}.step{{background:#fbfaf6;padding:18px;line-height:1.65}}.step b{{display:block;color:#176b5b;margin-bottom:8px}}.chart{{background:#fbfaf6;margin:18px 0;padding:12px;border-radius:4px}}.callout{{border-left:4px solid #bb654f;background:#fbfaf6;padding:18px 22px;line-height:1.8}}table{{border-collapse:collapse;width:100%;font-size:12px;background:#fbfaf6}}th,td{{padding:8px;border-bottom:1px solid #d9ddd8;text-align:left;white-space:nowrap}}th{{background:#e8ece8;color:#176b5b;position:sticky;top:0}}.table-wrap{{overflow-x:auto;overflow-y:visible;border:1px solid #d9ddd8}}code{{color:#176b5b}}@media(max-width:800px){{.metrics,.steps{{grid-template-columns:1fr 1fr}}}}
 </style></head><body><main>
-<h1>10Y地方债策略：因子权重搜索</h1>
+<h1>10Y地方债策略：因子权重搜索 {search_version}</h1>
 <p class="lead">本报告汇总{'日频' if signal_frequency == 'daily' else '周频'}权重搜索的完整设计和结果。搜索只改变有效因子的赋分权重，定性阈值和仓位制度保持固定；全部候选使用NumPy矩阵分块计算。资本利得BP按 -仓位 × YTM变化BP 计算，不乘久期。</p>
 <div class="metrics"><div class="metric">候选组合<b>{len(results):,}</b></div><div class="metric">累计资本利得<b>{best['capital_gain_total_bp']:.2f} BP</b></div><div class="metric">资本利得超额<b>{best['capital_gain_excess_bp']:.2f} BP</b></div><div class="metric">逐笔胜率<b>{best['capital_trade_win_rate']:.2%}</b></div></div>
-<h2>搜索设计</h2><div class="steps"><div class="step"><b>权重步长</b>所有有效因子权重以5分为最小单位。</div><div class="step"><b>模块约束</b>供给20至40、银行10至25、估值25至45、非银5至25。</div><div class="step"><b>发飞因子</b>历史有效数据仅覆盖2026年少数周，本轮固定为0，不参与打分与搜索。</div><div class="step"><b>排序目标</b>{formula}</div></div>
+<h2>搜索设计</h2><div class="steps"><div class="step"><b>权重步长</b>所有有效因子权重以5分为最小单位。</div><div class="step"><b>模块约束</b>{'供给、银行、估值、非银均可为0，单类上限50，模块合计100。' if search_version == 'v2' else '供给20至40、银行10至25、估值25至45、非银5至25。'}</div><div class="step"><b>发飞因子</b>历史有效数据仅覆盖2026年少数周，本轮固定为0，不参与打分与搜索。</div><div class="step"><b>排序目标</b>{formula}</div></div>
 <h3>固定定性阈值</h3><div class="table-wrap">{threshold_table.to_html(index=False, escape=False)}</div>
 <h3>固定仓位制度</h3><div class="table-wrap">{position_table.to_html(index=False, escape=False)}</div>
 <h2>最佳结果</h2><div class="table-wrap">{summary.to_html(index=False, escape=False)}</div>

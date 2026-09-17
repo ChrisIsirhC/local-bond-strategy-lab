@@ -88,5 +88,7 @@
     "signal_score.csv",
     "strategy_nav.csv",
     "performance_report.html"
-  ]
+  ],
+  "short_id": "S054",
+  "short_id_prefix": "S"
 }

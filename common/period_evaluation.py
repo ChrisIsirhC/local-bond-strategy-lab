@@ -16,7 +16,20 @@ RECENT_START = "2026-01-01"
 def period_ranges(training_end: str, data_start: object, data_end: object) -> OrderedDict[str, tuple[pd.Timestamp, pd.Timestamp]]:
     start = pd.Timestamp(data_start).normalize()
     end = pd.Timestamp(data_end).normalize()
-    cutoff = min(max(pd.Timestamp(training_end).normalize(), start), end)
+    requested_cutoff = pd.Timestamp(training_end).normalize()
+    # A legacy rolling archive may contain only the stitched OOS path.  Do
+    # not clamp a training cutoff before that path to its first OOS row: that
+    # would fabricate a one-day "搜索期" and exclude the first OOS day.
+    if requested_cutoff < start:
+        return OrderedDict(
+            [
+                ("搜索期", (start, start - pd.Timedelta(days=1))),
+                ("样本外", (start, end)),
+                ("2026年以来", (max(pd.Timestamp(RECENT_START), start), end)),
+                ("全区间", (start, end)),
+            ]
+        )
+    cutoff = min(requested_cutoff, end)
     out_of_sample_start = cutoff + pd.Timedelta(days=1)
     recent_start = max(pd.Timestamp(RECENT_START), out_of_sample_start)
     return OrderedDict(
@@ -34,9 +47,26 @@ def evaluate_periods(
     signals: pd.DataFrame,
     training_end: str = DEFAULT_TRAINING_END,
     benchmark_name: str = CONDITIONAL_BENCHMARK_NAME,
+    include_shortcuts: bool = False,
 ) -> dict[str, dict[str, object]]:
     results: dict[str, dict[str, object]] = {}
-    for label, (start, end) in period_ranges(training_end, daily["date"].min(), daily["date"].max()).items():
+    ranges = period_ranges(training_end, daily["date"].min(), daily["date"].max())
+    if include_shortcuts:
+        data_start = pd.Timestamp(daily["date"].min()).normalize()
+        data_end = pd.Timestamp(daily["date"].max()).normalize()
+        ranges = OrderedDict(
+            [(key, ranges[key]) for key in ("搜索期", "样本外") if key in ranges]
+            + [
+                ("2024年", (max(data_start, pd.Timestamp("2024-01-01")), min(data_end, pd.Timestamp("2024-12-31")))),
+                ("2025年", (max(data_start, pd.Timestamp("2025-01-01")), min(data_end, pd.Timestamp("2025-12-31")))),
+                ("2025年以来", (max(data_start, pd.Timestamp("2025-01-01")), data_end)),
+                ("2025年下半年以来", (max(data_start, pd.Timestamp("2025-07-01")), data_end)),
+                ("2026年", (max(data_start, pd.Timestamp("2026-01-01")), min(data_end, pd.Timestamp("2026-12-31")))),
+                ("2026年以来", ranges["2026年以来"]),
+                ("全区间", (data_start, data_end)),
+            ]
+        )
+    for label, (start, end) in ranges.items():
         sliced_daily, sliced_signals, strategy_metrics, benchmark_metrics = evaluate_period(
             daily, signals, start, end, benchmark_name
         )

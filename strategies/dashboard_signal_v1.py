@@ -77,8 +77,25 @@ class DashboardThresholds:
         }
 
 
+@dataclass(frozen=True)
+class FactorWindowConfig:
+    """Lookback windows for percentile-based factor groups, expressed in months."""
+
+    supply_months: int = 12
+    bank_months: int = 12
+    valuation_months: int = 12
+
+    def as_dict(self) -> dict[str, int]:
+        return {
+            "supply_months": int(self.supply_months),
+            "bank_months": int(self.bank_months),
+            "valuation_months": int(self.valuation_months),
+        }
+
+
 DEFAULT_WEIGHTS = DashboardWeights()
 DEFAULT_THRESHOLDS = DashboardThresholds()
+DEFAULT_FACTOR_WINDOWS = FactorWindowConfig()
 WEIGHT_COLUMNS = [
     "supply_amount",
     "supply_ratio",
@@ -97,6 +114,64 @@ def _pct_to_100(series: pd.Series) -> pd.Series:
     if values.dropna().empty:
         return values
     return values * 100.0 if values.max() <= 1.5 else values
+
+
+def _rolling_percentile_prior(
+    values: pd.Series,
+    dates: pd.Series,
+    months: int,
+) -> pd.Series:
+    """Compute a calendar-window percentile using only observations before each signal date."""
+    numeric = pd.to_numeric(values, errors="coerce").reset_index(drop=True)
+    date_values = pd.to_datetime(dates, errors="coerce").reset_index(drop=True)
+    lookback_days = int(months) * 30
+    result: list[float] = []
+    for index, value in numeric.items():
+        current_date = date_values.iloc[index]
+        if pd.isna(value) or pd.isna(current_date):
+            result.append(float("nan"))
+            continue
+        history = numeric.loc[
+            (date_values >= current_date - pd.Timedelta(days=lookback_days))
+            & (date_values < current_date)
+        ].dropna()
+        result.append(float((history <= value).sum() / len(history) * 100.0) if len(history) else float("nan"))
+    return pd.Series(result, index=values.index)
+
+
+def _percentile_values(
+    df: pd.DataFrame,
+    windows: FactorWindowConfig | None = None,
+) -> dict[str, pd.Series]:
+    """Return factor percentiles while preserving archived 1Y columns exactly."""
+    w = windows or DEFAULT_FACTOR_WINDOWS
+    dates = df["信号日期"]
+
+    def choose(raw_column: str, one_year_column: str, months: int) -> pd.Series:
+        if int(months) == 12:
+            return _pct_to_100(df[one_year_column])
+        return _rolling_percentile_prior(df[raw_column], dates, int(months))
+
+    return {
+        "supply_amount": choose("未来一周地方债发行量", "未来一周地方债发行量_1年内滚动分位数", w.supply_months),
+        "supply_ratio": choose(
+            "未来一周地方债发行量/（国债发行量+地方债发行量）",
+            "未来一周地方债发行量/（国债发行量+地方债发行量）_1年内滚动分位数",
+            w.supply_months,
+        ),
+        "supply_long": choose("地方债发行10年以上绝对发行量", "地方债发行10年以上绝对发行量_1年内滚动分位数", w.supply_months),
+        "bank": choose("银行过去一周净买入金额", "银行过去一周净买入金额_1Y滚动分位数", w.bank_months),
+        "spread": choose(
+            "10年好地区一般债-10年国债活跃券利差",
+            "10年好地区一般债-10年国债活跃券利差_1年内滚动分位数",
+            w.valuation_months,
+        ),
+        "ncd": choose(
+            "10年好地区一般债-1年国股行NCD利差",
+            "10年好地区一般债-1年国股行NCD利差_1年内滚动分位数",
+            w.valuation_months,
+        ),
+    }
 
 
 def _bucket_score(value: float, low: float, high: float, weight: float, high_is_bullish: bool) -> tuple[float, str]:
@@ -178,6 +253,7 @@ def _position(score: float) -> float:
 def build_dashboard_factor_multipliers(
     root: Path,
     thresholds: DashboardThresholds | None = None,
+    factor_windows: FactorWindowConfig | None = None,
     signal_frequency: str = "weekly",
 ) -> pd.DataFrame:
     t = thresholds or DEFAULT_THRESHOLDS
@@ -185,12 +261,13 @@ def build_dashboard_factor_multipliers(
     df = pd.read_csv(path, encoding="utf-8-sig")
     df["signal_date"] = pd.to_datetime(df["信号日期"])
 
-    supply_amount_pct = _pct_to_100(df["未来一周地方债发行量_1年内滚动分位数"])
-    supply_ratio_pct = _pct_to_100(df["未来一周地方债发行量/（国债发行量+地方债发行量）_1年内滚动分位数"])
-    supply_long_pct = _pct_to_100(df["地方债发行10年以上绝对发行量_1年内滚动分位数"])
-    bank_pct = _pct_to_100(df["银行过去一周净买入金额_1Y滚动分位数"])
-    spread_pct = _pct_to_100(df["10年好地区一般债-10年国债活跃券利差_1年内滚动分位数"])
-    ncd_pct = _pct_to_100(df["10年好地区一般债-1年国股行NCD利差_1年内滚动分位数"])
+    percentiles = _percentile_values(df, factor_windows)
+    supply_amount_pct = percentiles["supply_amount"]
+    supply_ratio_pct = percentiles["supply_ratio"]
+    supply_long_pct = percentiles["supply_long"]
+    bank_pct = percentiles["bank"]
+    spread_pct = percentiles["spread"]
+    ncd_pct = percentiles["ncd"]
 
     out = pd.DataFrame({"signal_date": df["signal_date"]})
     out["supply_amount"] = [
@@ -226,6 +303,7 @@ def build_dashboard_signal(
     weights: DashboardWeights | None = None,
     thresholds: DashboardThresholds | None = None,
     position_policy: DashboardPositionPolicy | None = None,
+    factor_windows: FactorWindowConfig | None = None,
     signal_frequency: str = "weekly",
 ) -> pd.DataFrame:
     w = weights or DEFAULT_WEIGHTS
@@ -235,12 +313,14 @@ def build_dashboard_signal(
     df = pd.read_csv(path, encoding="utf-8-sig")
     df["signal_date"] = pd.to_datetime(df["信号日期"])
 
-    supply_amount_pct = _pct_to_100(df["未来一周地方债发行量_1年内滚动分位数"])
-    supply_ratio_pct = _pct_to_100(df["未来一周地方债发行量/（国债发行量+地方债发行量）_1年内滚动分位数"])
-    supply_long_pct = _pct_to_100(df["地方债发行10年以上绝对发行量_1年内滚动分位数"])
-    bank_pct = _pct_to_100(df["银行过去一周净买入金额_1Y滚动分位数"])
-    spread_pct = _pct_to_100(df["10年好地区一般债-10年国债活跃券利差_1年内滚动分位数"])
-    ncd_pct = _pct_to_100(df["10年好地区一般债-1年国股行NCD利差_1年内滚动分位数"])
+    factor_windows = factor_windows or DEFAULT_FACTOR_WINDOWS
+    percentiles = _percentile_values(df, factor_windows)
+    supply_amount_pct = percentiles["supply_amount"]
+    supply_ratio_pct = percentiles["supply_ratio"]
+    supply_long_pct = percentiles["supply_long"]
+    bank_pct = percentiles["bank"]
+    spread_pct = percentiles["spread"]
+    ncd_pct = percentiles["ncd"]
 
     rows: list[dict[str, object]] = []
     for i, row in df.iterrows():
@@ -292,6 +372,13 @@ def build_dashboard_signal(
             "signal_date": row["signal_date"],
             "周期起始": row.get("周期起始", row["信号日期"]),
             "周期结束": row.get("周期结束", row["信号日期"]),
+            "信号产生日期": row.get("信号产生日期", None),
+            "信号适用开始日期": row.get("信号适用开始日期", row["信号日期"]),
+            "信号适用结束日期": row.get("信号适用结束日期", row["信号日期"]),
+            "供给信息截至日期": row.get("供给信息截至日期", row.get("供给取数日期", None)),
+            "银行需求取数日期": row.get("银行需求取数日期", None),
+            "利差取数日期": row.get("利差取数日期", None),
+            "非银情绪取数日期": row.get("非银情绪取数日期", None),
             "总分_raw": raw_score,
             "总分": score,
             "供给模块_利空": int(supply_bearish),
@@ -301,9 +388,32 @@ def build_dashboard_signal(
             "利空模块数": int(bearish_module_count),
             "供给或需求利空": int(supply_bearish or demand_bearish),
         }
+        # Persist the decision inputs alongside scores so every archived signal remains auditable.
+        factor_inputs = {
+            "供给_发行量": (row["未来一周地方债发行量"], supply_amount_pct.iloc[i]),
+            "供给_发行占比": (
+                row["未来一周地方债发行量/（国债发行量+地方债发行量）"],
+                supply_ratio_pct.iloc[i],
+            ),
+            "供给_10Y以上发行": (row["地方债发行10年以上绝对发行量"], supply_long_pct.iloc[i]),
+            "供给_发飞惩罚": (row["过去一周是否有地方债“发飞”"], None),
+            "银行需求": (row["银行过去一周净买入金额"], bank_pct.iloc[i]),
+            "利差_地方债国债": (
+                row["10年好地区一般债-10年国债活跃券利差"],
+                spread_pct.iloc[i],
+            ),
+            "利差_周度变化": (row["上述利差周度变化情况"], None),
+            "利差_地方债NCD": (
+                row["10年好地区一般债-1年国股行NCD利差"],
+                ncd_pct.iloc[i],
+            ),
+            "非银情绪": (row["基煜纯债基金周度净申购情况"], None),
+        }
         for name, value in factor_scores.items():
             output[f"{name}_得分"] = value
             output[f"{name}_定性"] = factor_labels[name]
+            output[f"{name}_原始数据"] = factor_inputs[name][0]
+            output[f"{name}_二级数据"] = factor_inputs[name][1]
         rows.append(output)
 
     out = pd.DataFrame(rows).sort_values("signal_date").reset_index(drop=True)
@@ -315,5 +425,6 @@ def build_dashboard_signal(
     out.attrs["position_policy"] = policy.as_dict()
     out.attrs["weights"] = w.as_dict()
     out.attrs["thresholds"] = t.as_dict()
+    out.attrs["factor_windows"] = factor_windows.as_dict()
     out.attrs["signal_frequency"] = signal_frequency
     return out

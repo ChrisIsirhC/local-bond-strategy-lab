@@ -1,0 +1,170 @@
+[
+  {
+    "名称": "基线01_重收益_日频",
+    "用途": "日频收益导向基线；用于检验绝对资本利得与国债超额。",
+    "来源归档": "backtest_outputs/experiments/20260721_123523__联合搜索_基础配置_100-重收益-权重搜索最优_日频_仓位1_0_0_无止盈止损_训练至20250101/config.json",
+    "频率": "daily",
+    "仓位": {
+      "bullish_threshold": 70.0,
+      "bearish_threshold": 15.0,
+      "bullish_position": 1.0,
+      "neutral_position": 0.0,
+      "bearish_position": 0.0,
+      "bearish_min_core_factors": 0,
+      "bearish_require_supply_or_demand": 0,
+      "bearish_confirmation_periods": 1,
+      "take_profit_bp": 0.0,
+      "stop_loss_bp": 0.0
+    },
+    "因子窗口": {
+      "supply_months": 12,
+      "bank_months": 12,
+      "valuation_months": 12
+    },
+    "配置文件": "configs\\baselines\\基线01_重收益_日频.json"
+  },
+  {
+    "名称": "基线02_重胜率_日频",
+    "用途": "日频胜率导向基线；用于检验高胜率交易。",
+    "来源归档": "backtest_outputs/experiments/20260721_130021__联合搜索_基础配置_100-重胜率-权重搜索最优_日频_仓位1_0_0_无止盈止损_训练至20250101/config.json",
+    "频率": "daily",
+    "仓位": {
+      "bullish_threshold": 70.0,
+      "bearish_threshold": 30.0,
+      "bullish_position": 1.0,
+      "neutral_position": 0.0,
+      "bearish_position": 0.0,
+      "bearish_min_core_factors": 0,
+      "bearish_require_supply_or_demand": 0,
+      "bearish_confirmation_periods": 1,
+      "take_profit_bp": 0.0,
+      "stop_loss_bp": 0.0
+    },
+    "因子窗口": {
+      "supply_months": 12,
+      "bank_months": 12,
+      "valuation_months": 12
+    },
+    "配置文件": "configs\\baselines\\基线02_重胜率_日频.json"
+  },
+  {
+    "名称": "基线03_激进看多_周频",
+    "用途": "周频收益导向基线；用于比较周频看多择时。",
+    "来源归档": "backtest_outputs/experiments/20260721_124250__联合搜索_基础配置_100-激进看多_周频_仓位1_0_0_无止盈止损_训练至20250101/config.json",
+    "频率": "weekly",
+    "仓位": {
+      "bullish_threshold": 70.0,
+      "bearish_threshold": 30.0,
+      "bullish_position": 1.0,
+      "neutral_position": 0.0,
+      "bearish_position": 0.0,
+      "bearish_min_core_factors": 0,
+      "bearish_require_supply_or_demand": 0,
+      "bearish_confirmation_periods": 1,
+      "take_profit_bp": 0.0,
+      "stop_loss_bp": 0.0
+    },
+    "因子窗口": {
+      "supply_months": 12,
+      "bank_months": 12,
+      "valuation_months": 12
+    },
+    "配置文件": "configs\\baselines\\基线03_激进看多_周频.json"
+  },
+  {
+    "名称": "基线04_重胜率_周频",
+    "用途": "周频高胜率经典基线。",
+    "来源归档": "backtest_outputs/experiments/20260721_133816__联合搜索_基础配置_100-重胜率-权重搜索最优_周频_仓位1_0_0_无止盈止损_训练至20250101/config.json",
+    "频率": "weekly",
+    "仓位": {
+      "bullish_threshold": 70.0,
+      "bearish_threshold": 30.0,
+      "bullish_position": 1.0,
+      "neutral_position": 0.0,
+      "bearish_position": 0.0,
+      "bearish_min_core_factors": 0,
+      "bearish_require_supply_or_demand": 0,
+      "bearish_confirmation_periods": 1,
+      "take_profit_bp": 0.0,
+      "stop_loss_bp": 0.0
+    },
+    "因子窗口": {
+      "supply_months": 12,
+      "bank_months": 12,
+      "valuation_months": 12
+    },
+    "配置文件": "configs\\baselines\\基线04_重胜率_周频.json"
+  },
+  {
+    "名称": "基线05_v2重胜率_周频_推荐",
+    "用途": "当前推荐；v2放开模块最低权重后的样本外稳定候选。",
+    "来源归档": "backtest_outputs/experiments/20260722_141031__四基线v2_周频重胜率_训练至20250101/config.json",
+    "频率": "weekly",
+    "仓位": {
+      "bullish_threshold": 70.0,
+      "bearish_threshold": 30.0,
+      "bullish_position": 1.0,
+      "neutral_position": 0.0,
+      "bearish_position": 0.0,
+      "bearish_min_core_factors": 0,
+      "bearish_require_supply_or_demand": 0,
+      "bearish_confirmation_periods": 1,
+      "take_profit_bp": 0.0,
+      "stop_loss_bp": 0.0
+    },
+    "因子窗口": {
+      "supply_months": 12,
+      "bank_months": 12,
+      "valuation_months": 12
+    },
+    "配置文件": "configs\\baselines\\基线05_v2重胜率_周频_推荐.json"
+  },
+  {
+    "名称": "基线06_v2上限50_重收益_日频_候选",
+    "用途": "日频收益导向；上限50后样本外资本利得与相对国债超额均改善。",
+    "来源归档": "backtest_outputs/experiments/20260723_091513__四基线v2上限50_日频重收益_训练至20250101/config.json",
+    "频率": "daily",
+    "仓位": {
+      "bullish_threshold": 70.0,
+      "bearish_threshold": 15.0,
+      "bullish_position": 1.0,
+      "neutral_position": 0.0,
+      "bearish_position": 0.0,
+      "bearish_min_core_factors": 0,
+      "bearish_require_supply_or_demand": 0,
+      "bearish_confirmation_periods": 1,
+      "take_profit_bp": 0.0,
+      "stop_loss_bp": 0.0
+    },
+    "因子窗口": {
+      "supply_months": 12,
+      "bank_months": 12,
+      "valuation_months": 12
+    },
+    "配置文件": "configs\\baselines\\基线06_v2上限50_重收益_日频_候选.json"
+  },
+  {
+    "名称": "基线07_v2上限50_重胜率_周频_推荐",
+    "用途": "周频高胜率主基线；上限50后训练期、样本外和2026年以来资本利得超额均改善。",
+    "来源归档": "backtest_outputs/experiments/20260723_091834__四基线v2上限50_周频重胜率_训练至20250101/config.json",
+    "频率": "weekly",
+    "仓位": {
+      "bullish_threshold": 70.0,
+      "bearish_threshold": 30.0,
+      "bullish_position": 1.0,
+      "neutral_position": 0.0,
+      "bearish_position": 0.0,
+      "bearish_min_core_factors": 0,
+      "bearish_require_supply_or_demand": 0,
+      "bearish_confirmation_periods": 1,
+      "take_profit_bp": 0.0,
+      "stop_loss_bp": 0.0
+    },
+    "因子窗口": {
+      "supply_months": 12,
+      "bank_months": 12,
+      "valuation_months": 12
+    },
+    "配置文件": "configs\\baselines\\基线07_v2上限50_重胜率_周频_推荐.json"
+  }
+]
