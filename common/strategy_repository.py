@@ -302,6 +302,22 @@ def _strategy_id_lookup(root_text: str, archive_name: str) -> str | None:
 
 def strategy_id_for_archive(root: Path, archive_name: str) -> str | None:
     """Read an immutable strategy identity without reopening SQLite on each UI render."""
+    # Public deployments may address an archive by its immutable strategy ID
+    # rather than the original (often very long) timestamped folder name.
+    # Accept that compact form only when it is already present in the registry;
+    # this never creates or mutates an ID.
+    normalized = str(archive_name).upper().strip()
+    if _IDENTIFIER_RE.fullmatch(normalized):
+        try:
+            with _connection(Path(root)) as connection:
+                row = connection.execute(
+                    "SELECT strategy_id FROM strategy_identity WHERE strategy_id = ?",
+                    (normalized,),
+                ).fetchone()
+                if row is not None:
+                    return str(row["strategy_id"])
+        except (sqlite3.Error, ValueError):
+            return None
     return _strategy_id_lookup(str(Path(root).resolve()), str(archive_name))
 
 

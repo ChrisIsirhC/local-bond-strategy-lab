@@ -1,0 +1,57 @@
+{
+  "strategy_id": "F143",
+  "format": "Parquet/ZSTD",
+  "artifacts": {
+    "strategy_nav": {
+      "path": "backtest_outputs/result_store/F143/strategy_nav.parquet",
+      "rows": 637,
+      "columns": [
+        "日期",
+        "信号日期",
+        "总分",
+        "结论",
+        "目标仓位",
+        "仓位",
+        "止盈止损事件",
+        "条件基准仓位",
+        "交易标的到期收益率_百分比",
+        "比较基准到期收益率_百分比",
+        "策略日收益率",
+        "基准日收益率",
+        "策略票息Carry收益",
+        "策略资本利得收益",
+        "基准票息Carry收益",
+        "基准资本利得收益",
+        "票息Carry超额",
+        "资本利得超额",
+        "策略资本利得_BP",
+        "基准资本利得_BP",
+        "资本利得超额_BP",
+        "策略累计资本利得_BP",
+        "基准累计资本利得_BP",
+        "累计资本利得超额_BP",
+        "策略累计票息Carry",
+        "策略累计资本利得",
+        "基准累计票息Carry",
+        "基准累计资本利得",
+        "策略净值",
+        "基准净值",
+        "超额净值"
+      ],
+      "fingerprint": "6f0be91c7752b8b006003caa4f3ce5f7339091e05e8a6570b69cd2af86a08e7e",
+      "bytes": 58584
+    },
+    "signal_score": {
+      "path": "backtest_outputs/result_store/F143/signal_score.parquet",
+      "rows": 133,
+      "columns": [
+        "signal_date",
+        "总分",
+        "结论",
+        "仓位"
+      ],
+      "fingerprint": "7f3b7f2306d79e3563dddbe35ef6db1ecfddd73eae9f94f638508a88ca56c9a8",
+      "bytes": 3725
+    }
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "strategy_id": "R003",
+  "format": "Parquet/ZSTD",
+  "artifacts": {
+    "strategy_nav": {
+      "path": "backtest_outputs/result_store/R003/strategy_nav.parquet",
+      "rows": 637,
+      "columns": [
+        "日期",
+        "信号日期",
+        "总分",
+        "结论",
+        "目标仓位",
+        "仓位",
+        "止盈止损事件",
+        "条件基准仓位",
+        "交易标的到期收益率_百分比",
+        "比较基准到期收益率_百分比",
+        "策略日收益率",
+        "基准日收益率",
+        "策略票息Carry收益",
+        "策略资本利得收益",
+        "基准票息Carry收益",
+        "基准资本利得收益",
+        "票息Carry超额",
+        "资本利得超额",
+        "策略资本利得_BP",
+        "基准资本利得_BP",
+        "资本利得超额_BP",
+        "策略累计资本利得_BP",
+        "基准累计资本利得_BP",
+        "累计资本利得超额_BP",
+        "策略累计票息Carry",
+        "策略累计资本利得",
+        "基准累计票息Carry",
+        "基准累计资本利得",
+        "策略净值",
+        "基准净值",
+        "超额净值"
+      ],
+      "fingerprint": "0541f2e1471d04b6a139775f2906935884c9ef9ac4c3fbc957a9768c91755459",
+      "bytes": 86778
+    },
+    "signal_score": {
+      "path": "backtest_outputs/result_store/R003/signal_score.parquet",
+      "rows": 141,
+      "columns": [
+        "signal_date",
+        "总分",
+        "结论",
+        "仓位"
+      ],
+      "fingerprint": "af0b971ad6a64c3a5c1d37608da71bb03e9afbd31682cca4eb48d1365c587e06",
+      "bytes": 3772
+    },
+    "rolling_periods": {
+      "path": "backtest_outputs/result_store/R003/rolling_periods.parquet",
+      "rows": 11,
+      "columns": [
+        "期数",
+        "权重搜索版本",
+        "训练起始日",
+        "训练截止日",
+        "样本外起始日",
+        "样本外结束日",
+        "搜索模式",
+        "候选目标函数",
+        "上一期参数在当前窗口目标函数",
+        "目标函数改善",
+        "最小改善阈值",
+        "候选参数是否变化",
+        "首次定参",
+        "是否切换新参数",
+        "采用参数",
+        "参数配置文件",
+        "样本外资本利得_BP",
+        "样本外超额_BP"
+      ],
+      "fingerprint": "12073a2b7fbe6d8f5988fb38ba964c5891801e994f340559e8d3067c2e74e3d2",
+      "bytes": 15981
+    }
+  }
+}
