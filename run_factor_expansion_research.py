@@ -30,6 +30,7 @@ from common.factor_expansion_research import (
     run_expansion_weight_search,
     training_candidate_rank,
 )
+from common.frame_store import frame_exists, read_frame, write_frame
 from strategies.dashboard_signal_v1 import DashboardThresholds
 from strategies.position_policy import DashboardPositionPolicy
 
@@ -83,11 +84,11 @@ def run_factor_expansion_static_research(
     seasonality: dict[str, object] = {}
     for frequency in selected_frequencies:
         multipliers, inputs = build_factor_expansion_multipliers(root, signal_frequency=frequency)
-        multipliers.to_csv(output / f"{frequency}_因子乘数.csv", index=False, encoding="utf-8-sig")
-        inputs.to_csv(output / f"{frequency}_新增因子底层输入.csv", index=False, encoding="utf-8-sig")
+        write_frame(multipliers, output / f"{frequency}_因子乘数.csv")
+        write_frame(inputs, output / f"{frequency}_新增因子底层输入.csv")
         quality_rows.append(factor_expansion_data_quality(inputs, frequency))
         seasonality[frequency] = supply_seasonality_feasibility(inputs)
-    pd.concat(quality_rows, ignore_index=True).to_csv(output / "新增因子实现检查.csv", index=False, encoding="utf-8-sig")
+    write_frame(pd.concat(quality_rows, ignore_index=True), output / "新增因子实现检查.csv")
     (output / "季节性供给可行性.json").write_text(json.dumps(seasonality, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     summary: list[dict[str, object]] = []
@@ -115,8 +116,8 @@ def run_factor_expansion_static_research(
                 weighted, trace = run_expansion_weight_search(root, base, None, training_end, beam_width=beam_width)
                 selected, thresholds = run_expansion_threshold_search(root, weighted, None, training_end)
                 stem = f"{factor_version}_{objective_name}_{frequency}"
-                trace.to_csv(output / f"{stem}_V2权重搜索轨迹.csv", index=False, encoding="utf-8-sig")
-                thresholds.to_csv(output / f"{stem}_阈值搜索.csv", index=False, encoding="utf-8-sig")
+                write_frame(trace, output / f"{stem}_V2权重搜索轨迹.csv")
+                write_frame(thresholds, output / f"{stem}_阈值搜索.csv")
                 train_daily, train_signals, train_metrics, train_benchmark = evaluate_expansion_config(root, selected, None, training_end)
                 used_original_fallback = False
                 if factor_version == "扩展因子" and original_winner is not None:
@@ -135,10 +136,10 @@ def run_factor_expansion_static_research(
                     original_winners[route_key] = selected
                 oos_start = (pd.Timestamp(training_end) + pd.Timedelta(days=1)).date().isoformat()
                 oos_daily, oos_signals, oos_metrics, oos_benchmark = evaluate_expansion_config(root, selected, oos_start, None)
-                train_daily.to_csv(output / f"{stem}_训练期日度.csv", index=False, encoding="utf-8-sig")
-                oos_daily.to_csv(output / f"{stem}_样本外日度.csv", index=False, encoding="utf-8-sig")
-                train_signals.to_csv(output / f"{stem}_训练期信号.csv", index=False, encoding="utf-8-sig")
-                oos_signals.to_csv(output / f"{stem}_样本外信号.csv", index=False, encoding="utf-8-sig")
+                write_frame(train_daily, output / f"{stem}_训练期日度.csv")
+                write_frame(oos_daily, output / f"{stem}_样本外日度.csv")
+                write_frame(train_signals, output / f"{stem}_训练期信号.csv")
+                write_frame(oos_signals, output / f"{stem}_样本外信号.csv")
                 row = {
                     "因子版本": factor_version,
                     "目标": objective_name,
@@ -182,7 +183,7 @@ def run_factor_expansion_static_research(
                     ),
                 }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     frame = pd.DataFrame(summary)
-    frame.to_csv(output / "静态研究汇总.csv", index=False, encoding="utf-8-sig")
+    write_frame(frame, output / "静态研究汇总.csv")
     write_factor_expansion_manifest(
         output,
         training_end=training_end,
@@ -262,7 +263,7 @@ def materialize_factor_expansion_static_details(root: Path, study_dir: Path) -> 
     for config_path in study_dir.glob("*_最终配置.json"):
         payload = json.loads(config_path.read_text(encoding="utf-8"))
         stem = config_path.name.removesuffix("_最终配置.json")
-        if (study_dir / f"{stem}_训练期日度.csv").exists() and (study_dir / f"{stem}_样本外日度.csv").exists():
+        if frame_exists(study_dir / f"{stem}_训练期日度.csv") and frame_exists(study_dir / f"{stem}_样本外日度.csv"):
             continue
         config = ExpansionResearchConfig(
             factor_version=str(payload["因子版本"]),
@@ -277,8 +278,8 @@ def materialize_factor_expansion_static_details(root: Path, study_dir: Path) -> 
         train_daily, _, _, _ = evaluate_expansion_config(root, config, None, training_end)
         oos_start = (pd.Timestamp(training_end) + pd.Timedelta(days=1)).date().isoformat()
         oos_daily, _, _, _ = evaluate_expansion_config(root, config, oos_start, None)
-        train_daily.to_csv(study_dir / f"{stem}_训练期日度.csv", index=False, encoding="utf-8-sig")
-        oos_daily.to_csv(study_dir / f"{stem}_样本外日度.csv", index=False, encoding="utf-8-sig")
+        write_frame(train_daily, study_dir / f"{stem}_训练期日度.csv")
+        write_frame(oos_daily, study_dir / f"{stem}_样本外日度.csv")
 
 
 def main() -> Path:
@@ -377,8 +378,8 @@ def _write_report(
     rolling_section = (
         "<p>滚动定参仍在运行；完成后将在此处追加逐期样本外汇总。</p>"
     )
-    if rolling_path.exists():
-        rolling = pd.read_csv(rolling_path, encoding="utf-8-sig")
+    if frame_exists(rolling_path):
+        rolling = read_frame(rolling_path)
         for column in rolling.columns:
             if "胜率" in column:
                 rolling[column] = pd.to_numeric(rolling[column], errors="coerce").map(

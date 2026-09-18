@@ -143,6 +143,7 @@ def run_expansion_weight_search(
     training_start: str | None,
     training_end: str,
     beam_width: int = 160,
+    prune: bool = True,
 ) -> tuple[ExpansionResearchConfig, pd.DataFrame]:
     """Search only complete V2 weight configurations.
 
@@ -163,6 +164,10 @@ def run_expansion_weight_search(
     factor_columns = base.factor_columns
     matrix, prepared = _prepare_vectorized_market(multipliers, market, factor_columns)
     group_for_factor = _group_for_factor(factor_columns)
+    if not prune:
+        return _run_exhaustive_weight_search(
+            base, factor_columns, group_for_factor, matrix, prepared,
+        )
     survivor_count = min(max(int(beam_width), 32), 64)
     states = _full_weight_start_states(factor_columns, group_for_factor, survivor_count)
     baseline_state = tuple(int(round(float(base.weights.get(column, 0.0)))) for column in factor_columns)
@@ -207,6 +212,67 @@ def run_expansion_weight_search(
     best = finalists.iloc[0]
     weights = {column: float(best[column]) for column in factor_columns}
     return replace(base, weights=weights), pd.concat(trace, ignore_index=True)
+
+
+def _all_full_weight_states(
+    columns: tuple[str, ...],
+    groups: dict[str, str],
+    *,
+    total_units: int = 20,
+) -> Iterable[tuple[int, ...]]:
+    """Yield every feasible 5-point allocation without beam pruning."""
+    module_limit = _module_max(groups) // STEP
+    group_names = tuple(sorted(set(groups.values())))
+    group_units = {group: 0 for group in group_names}
+    values = [0] * len(columns)
+
+    def visit(index: int, remaining: int) -> Iterable[tuple[int, ...]]:
+        if index == len(columns) - 1:
+            group = groups[columns[index]]
+            if 0 <= remaining <= module_limit - group_units[group]:
+                values[index] = remaining * STEP
+                yield tuple(values)
+            return
+        group = groups[columns[index]]
+        maximum = min(remaining, module_limit - group_units[group])
+        for units in range(maximum + 1):
+            values[index] = units * STEP
+            group_units[group] += units
+            yield from visit(index + 1, remaining - units)
+            group_units[group] -= units
+        values[index] = 0
+
+    yield from visit(0, total_units)
+
+
+def _run_exhaustive_weight_search(
+    base: ExpansionResearchConfig,
+    columns: tuple[str, ...],
+    groups: dict[str, str],
+    matrix: np.ndarray,
+    prepared: dict[str, np.ndarray],
+) -> tuple[ExpansionResearchConfig, pd.DataFrame]:
+    """Score the complete feasible universe in bounded vectorized chunks."""
+    best_row: pd.Series | None = None
+    batch: list[tuple[int, ...]] = []
+    for state in _all_full_weight_states(columns, groups):
+        batch.append(state)
+        if len(batch) < 4096:
+            continue
+        frame = _score_weight_states(batch, columns, matrix, prepared, base.objective, base.positions)
+        candidate = _select_weight_survivors(frame, columns, 1).iloc[0]
+        if best_row is None or float(candidate["目标函数"]) > float(best_row["目标函数"]):
+            best_row = candidate
+        batch = []
+    if batch:
+        frame = _score_weight_states(batch, columns, matrix, prepared, base.objective, base.positions)
+        candidate = _select_weight_survivors(frame, columns, 1).iloc[0]
+        if best_row is None or float(candidate["目标函数"]) > float(best_row["目标函数"]):
+            best_row = candidate
+    if best_row is None:
+        raise ValueError("完整滚动搜索没有可行权重组合")
+    weights = {column: float(best_row[column]) for column in columns}
+    return replace(base, weights=weights), pd.DataFrame([best_row])
 
 
 def run_expansion_threshold_search(
@@ -334,7 +400,9 @@ def run_expansion_rolling_research(
     minimum_training_months: int = 24,
     recalibration_months: int = 3,
     beam_width: int = 40,
+    prune: bool = True,
     original_periods: pd.DataFrame | None = None,
+    replay_periods: pd.DataFrame | None = None,
     progress: Callable[[str, int | None, int | None], None] | None = None,
     cancel_requested: Callable[[], bool] | None = None,
     progress_offset: int = 0,
@@ -386,18 +454,49 @@ def run_expansion_rolling_research(
         requested_end = train_end + pd.DateOffset(months=recalibration_months)
         end_candidates = market.loc[(market["date"] <= requested_end) & (market["date"] >= oos_start), "date"]
         oos_end = pd.Timestamp(end_candidates.iloc[-1]) if not end_candidates.empty else available_end
-        if progress:
-            progress(
-                f"第 {progress_offset + period + 1} 期：训练 {train_end:%Y-%m-%d}，正在搜索因子权重",
-                progress_offset + period,
-                reported_total,
-            )
-        weighted, _ = run_expansion_weight_search(root, base, None, train_end.date().isoformat(), beam_width=beam_width)
-        check_cancelled()
-        selected, _ = run_expansion_threshold_search(root, weighted, None, train_end.date().isoformat())
-        check_cancelled()
+        replay = pd.DataFrame()
+        if replay_periods is not None and not replay_periods.empty:
+            replay = replay_periods.loc[
+                pd.to_datetime(replay_periods["训练截止日"], errors="coerce").eq(train_end)
+            ]
         used_original_fallback = False
-        if base.factor_version == "扩展因子" and set(BASE_FACTOR_COLUMNS).issubset(base.factor_columns):
+        if not replay.empty:
+            saved = replay.iloc[0]
+            try:
+                saved_weights = json.loads(str(saved["权重"]))
+                selected = replace(
+                    base,
+                    weights={column: float(saved_weights.get(column, 0.0)) for column in base.factor_columns},
+                    positions=replace(
+                        base.positions,
+                        bullish_threshold=float(saved["看多阈值"]),
+                        bearish_threshold=float(saved["看空阈值"]),
+                    ),
+                )
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise ValueError(f"第 {period + 1} 期保存的因子参数不可复现") from exc
+            used_original_fallback = bool(saved.get("是否采用原始因子保底", False))
+            if progress:
+                progress(
+                    f"第 {progress_offset + period + 1} 期：复用已保存因子参数",
+                    progress_offset + period,
+                    reported_total,
+                )
+        else:
+            if progress:
+                progress(
+                    f"第 {progress_offset + period + 1} 期：训练 {train_end:%Y-%m-%d}，正在搜索因子权重",
+                    progress_offset + period,
+                    reported_total,
+                )
+            weighted, _ = run_expansion_weight_search(
+                root, base, None, train_end.date().isoformat(),
+                beam_width=beam_width, prune=prune,
+            )
+            check_cancelled()
+            selected, _ = run_expansion_threshold_search(root, weighted, None, train_end.date().isoformat())
+            check_cancelled()
+        if replay.empty and base.factor_version == "扩展因子" and set(BASE_FACTOR_COLUMNS).issubset(base.factor_columns):
             matching = pd.DataFrame()
             if original_periods is not None and not original_periods.empty:
                 matching = original_periods.loc[
@@ -422,7 +521,8 @@ def run_expansion_rolling_research(
                         reported_total,
                     )
                 original_weighted, _ = run_expansion_weight_search(
-                    root, original_base, None, train_end.date().isoformat(), beam_width=beam_width,
+                    root, original_base, None, train_end.date().isoformat(),
+                    beam_width=beam_width, prune=prune,
                 )
                 check_cancelled()
                 original, _ = run_expansion_threshold_search(

@@ -1,4 +1,4 @@
-"""Durable, single-worker queue for expensive rolling-research jobs.
+"""Durable queue for expensive rolling-research jobs.
 
 The dashboard deliberately submits jobs to a separate Python process.  A full
 V2 rolling search can take long enough that holding a Streamlit request open
@@ -26,6 +26,7 @@ from common.rolling_research import RollingResearchCancelled, RollingResearchCon
 
 
 QUEUE_RELATIVE_PATH = Path("backtest_outputs") / "rolling_task_queue.json"
+MAX_QUEUE_WORKERS = 2
 DATA_LOCK_SUFFIX = ".data.lock"
 WORKER_LOCK_SUFFIX = ".worker.lock"
 WORKER_LOG_NAME = "rolling_task_queue.log"
@@ -193,13 +194,12 @@ def cancel_rolling_task(root: Path, task_id: str) -> None:
 
 
 def start_rolling_queue_worker(root: Path) -> bool:
-    """Start a detached worker and report whether the queue was previously idle.
+    """Start up to two detached workers and report whether the queue was idle.
 
-    A short-lived contender is also started when a worker is already active.
-    It exits after failing to acquire the worker lock, except for the narrow
-    hand-off moment where the active worker is finishing exactly as a new task
-    is submitted.  In that case the contender acquires the lock and prevents a
-    pending task from being stranded without a worker.
+    Two short-lived contenders are started on every submission.  Slot locks
+    ensure that at most two workers own a task; extra contenders exit after
+    failing to acquire their slot, while a finishing slot can immediately
+    claim the next waiting task.
     """
     was_idle = not rolling_worker_running(root)
     script = root / "run_rolling_task_queue.py"
@@ -208,37 +208,46 @@ def start_rolling_queue_worker(root: Path) -> bool:
     log_path = root / "backtest_outputs" / WORKER_LOG_NAME
     log_path.parent.mkdir(parents=True, exist_ok=True)
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    with log_path.open("a", encoding="utf-8") as log:
-        subprocess.Popen(
-            [sys.executable, "-u", str(script), "--root", str(root)],
-            cwd=str(root),
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            creationflags=flags,
-            close_fds=False,
-        )
+    for slot in range(MAX_QUEUE_WORKERS):
+        with log_path.open("a", encoding="utf-8") as log:
+            subprocess.Popen(
+                [sys.executable, "-u", str(script), "--root", str(root), "--slot", str(slot)],
+                cwd=str(root),
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                creationflags=flags,
+                close_fds=False,
+            )
     return was_idle
 
 
 def rolling_worker_running(root: Path) -> bool:
-    lock_path = _worker_lock_path(root)
-    if not lock_path.exists():
-        return False
-    try:
-        payload = json.loads(lock_path.read_text(encoding="utf-8"))
-        pid = int(payload.get("pid", 0))
-    except (OSError, ValueError, TypeError, json.JSONDecodeError):
-        _remove_if_exists(lock_path)
-        return False
-    if _process_exists(pid):
-        return True
-    _remove_if_exists(lock_path)
-    return False
+    running = False
+    for slot in range(MAX_QUEUE_WORKERS):
+        lock_path = _worker_lock_path(root, slot)
+        if not lock_path.exists():
+            continue
+        try:
+            payload = json.loads(lock_path.read_text(encoding="utf-8"))
+            pid = int(payload.get("pid", 0))
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            _remove_if_exists(lock_path)
+            continue
+        if _process_exists(pid):
+            running = True
+        else:
+            _remove_if_exists(lock_path)
+    return running
 
 
-def process_rolling_queue(root: Path, run_job: Callable[..., dict[str, Any]] = run_rolling_research) -> None:
-    """Run pending jobs in order. Called only by the detached worker script."""
-    with _worker_lock(root) as acquired:
+def process_rolling_queue(
+    root: Path,
+    run_job: Callable[..., dict[str, Any]] = run_rolling_research,
+    *,
+    worker_slot: int = 0,
+) -> None:
+    """Run pending jobs. Called only by one detached worker slot."""
+    with _worker_lock(root, worker_slot) as acquired:
         if not acquired:
             return
         while True:
@@ -335,6 +344,9 @@ def _claim_next_task(root: Path) -> dict[str, Any] | None:
     with _data_lock(root):
         path = queue_path(root)
         records = _read_records(path)
+        active_count = sum(1 for item in records if item.get("status") in {"启动中", "运行中"})
+        if active_count >= MAX_QUEUE_WORKERS:
+            return None
         for task in records:
             if task.get("status") in {"启动中", "等待中"}:
                 task["status"] = "运行中"
@@ -422,8 +434,8 @@ def _data_lock(root: Path) -> Iterator[None]:
 
 
 @contextmanager
-def _worker_lock(root: Path) -> Iterator[bool]:
-    lock_path = _worker_lock_path(root)
+def _worker_lock(root: Path, worker_slot: int = 0) -> Iterator[bool]:
+    lock_path = _worker_lock_path(root, worker_slot)
     try:
         _acquire_file_lock(lock_path)
     except TimeoutError:
@@ -435,8 +447,9 @@ def _worker_lock(root: Path) -> Iterator[bool]:
         _remove_if_exists(lock_path)
 
 
-def _worker_lock_path(root: Path) -> Path:
-    return Path(f"{queue_path(root)}{WORKER_LOCK_SUFFIX}")
+def _worker_lock_path(root: Path, worker_slot: int = 0) -> Path:
+    suffix = "" if worker_slot == 0 else f".{int(worker_slot)}"
+    return Path(f"{queue_path(root)}{WORKER_LOCK_SUFFIX}{suffix}")
 
 
 def _acquire_file_lock(path: Path, timeout_seconds: float = 3.0) -> None:

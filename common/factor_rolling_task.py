@@ -29,6 +29,8 @@ from common.factor_expansion_research import (
 from common.performance import performance_metrics
 from common.provenance import record_step
 from common.reporting import write_strategy_outputs
+from common.result_store import read_archive_frame, write_result_frame
+from common.strategy_repository import strategy_id_for_archive
 from common.trade_metrics import capital_gain_trade_metrics
 from strategies.dashboard_signal_v1 import DashboardWeights
 
@@ -40,6 +42,7 @@ def run_factor_rolling_task(
     root: Path,
     raw: dict[str, Any],
     *,
+    replay_periods: pd.DataFrame | None = None,
     progress: ProgressCallback | None = None,
     cancel_requested: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
@@ -63,6 +66,11 @@ def run_factor_rolling_task(
     if frequency not in {"daily", "weekly"}:
         raise ValueError("因子滚动任务的信号频率无效")
     requested_version = str(raw.get("factor_version", ""))
+    # Legacy queued factor tasks used the former beam-pruned implementation.
+    # Keep that behavior when replaying an old queue record; new full tasks
+    # explicitly set ``execution_mode=complete``.
+    execution_mode = str(raw.get("execution_mode", "pruned")).strip().lower()
+    is_pruned = execution_mode in {"pruned", "fast", "剪枝"}
     comparison_ready = set(BASE_FACTOR_COLUMNS).issubset(enabled) and bool(set(enabled).difference(BASE_FACTOR_COLUMNS))
     factor_version = "扩展因子" if comparison_ready else "自选因子"
     if requested_version == "自选因子":
@@ -95,7 +103,9 @@ def run_factor_rolling_task(
         # This is the normal complete-configuration factor search, not the
         # faster factor-study rolling shortcut.
         beam_width=int(raw.get("beam_width", 160)),
+        prune=is_pruned,
         original_periods=None,
+        replay_periods=replay_periods,
         progress=progress,
         cancel_requested=cancel_requested,
     )
@@ -114,7 +124,7 @@ def run_factor_rolling_task(
     first_period = periods.iloc[0]
     output_manifest = {
         "任务名称": task_name,
-        "研究类型": "因子完整滚动定参",
+        "研究类型": "因子剪枝滚动定参" if is_pruned else "因子完整滚动定参",
         "因子版本": factor_version,
         "启用因子": list(enabled),
         "搜索目标": objective_name,
@@ -126,7 +136,11 @@ def run_factor_rolling_task(
         "首次搜索期结束日": str(first_period["训练截止日"]),
         "样本外起始日": str(periods.iloc[0]["样本外起始日"]),
         "样本外结束日": str(periods.iloc[-1]["样本外结束日"]),
-        "说明": "直接入队的因子完整滚动验证；未先生成静态 F 研究归档。",
+        "说明": (
+            "因子研究页的剪枝快速验证；不进入滚动任务队列。"
+            if is_pruned else
+            "完整滚动定参任务；进入滚动任务队列执行。"
+        ),
     }
     (output_dir / "滚动配置.json").write_text(
         json.dumps(output_manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
@@ -212,7 +226,7 @@ def run_factor_rolling_task(
     notes.append("未先生成静态因子研究归档；因子集合与搜索参数在入队时冻结。")
     provenance.update({
         "notes": list(dict.fromkeys(notes)),
-        "研究类型": "因子完整滚动定参归档",
+        "研究类型": "因子剪枝滚动归档" if is_pruned else "因子完整滚动定参归档",
         "因子研究权重": final_weights,
         "因子集合": list(enabled),
         "因子版本": factor_version,
@@ -227,7 +241,7 @@ def run_factor_rolling_task(
         benchmark_metrics,
         source="因子滚动定参",
         research_metadata={
-            "研究类型": "因子完整滚动定参",
+            "研究类型": "因子剪枝滚动定参" if is_pruned else "因子完整滚动定参",
             "训练起始日": output_manifest["首次搜索期起始日"],
             "训练截止日": output_manifest["首次搜索期结束日"],
             "样本外起始日": output_manifest["样本外起始日"],
@@ -325,14 +339,13 @@ def repair_factor_rolling_search_period_archives(root: Path) -> list[str]:
         rolling_manifest = json.loads((output_dir / "滚动配置.json").read_text(encoding="utf-8"))
         periods = pd.read_csv(output_dir / "逐期定参与样本外表现.csv", encoding="utf-8-sig")
         training_start = pd.Timestamp(str(periods.iloc[0]["训练起始日"]))
-        existing_daily_path = experiment_dir / "strategy_nav.csv"
-        if search_daily_path.exists() and search_signal_path.exists() and existing_daily_path.exists():
-            existing_frame = pd.read_csv(existing_daily_path, encoding="utf-8-sig", nrows=0)
+        if search_daily_path.exists() and search_signal_path.exists():
+            try:
+                existing_frame = read_archive_frame(experiment_dir, "strategy_nav")
+            except (OSError, ValueError, FileNotFoundError):
+                existing_frame = pd.DataFrame()
             date_column = "date" if "date" in existing_frame.columns else "日期"
-            existing_dates = pd.to_datetime(
-                pd.read_csv(existing_daily_path, encoding="utf-8-sig", usecols=[date_column])[date_column],
-                errors="coerce",
-            )
+            existing_dates = pd.to_datetime(existing_frame[date_column], errors="coerce") if date_column in existing_frame else pd.Series(dtype="datetime64[ns]")
             if not existing_dates.dropna().empty and existing_dates.min() <= training_start:
                 continue
         search_daily, search_signals, _, _ = reconstruct_factor_rolling_search_period(
@@ -350,7 +363,7 @@ def repair_factor_rolling_search_period_archives(root: Path) -> list[str]:
         archive_daily["date"] = pd.to_datetime(archive_daily["date"], errors="coerce")
         archive_daily["signal_date"] = pd.to_datetime(archive_daily["signal_date"], errors="coerce")
         archive_daily = archive_daily.dropna(subset=["date", "signal_date"]).reset_index(drop=True)
-        oos_signals = pd.read_csv(experiment_dir / "signal_score.csv", encoding="utf-8-sig")
+        oos_signals = read_archive_frame(experiment_dir, "signal_score")
         archive_signals = (
             pd.concat([search_signals, oos_signals], ignore_index=True, sort=False)
             .assign(signal_date=lambda frame: pd.to_datetime(frame["signal_date"], errors="coerce"))
@@ -363,6 +376,10 @@ def repair_factor_rolling_search_period_archives(root: Path) -> list[str]:
         benchmark.update(capital_gain_trade_metrics(archive_daily, "benchmark_capital_bp", position_col="comparison_position"))
         benchmark["benchmark_name"] = str(manifest.get("比较基准", "多头同仓位10Y国债 / 非多头现金"))
         write_strategy_outputs(archive_daily, archive_signals, strategy, benchmark, experiment_dir)
+        strategy_id = strategy_id_for_archive(root, experiment_dir.name)
+        if strategy_id:
+            write_result_frame(root, strategy_id, "strategy_nav", pd.read_csv(experiment_dir / "strategy_nav.csv", encoding="utf-8-sig"))
+            write_result_frame(root, strategy_id, "signal_score", pd.read_csv(experiment_dir / "signal_score.csv", encoding="utf-8-sig"))
         repaired_config = replace(
             base_config,
             backtest_start=str(archive_daily["date"].min().date()),

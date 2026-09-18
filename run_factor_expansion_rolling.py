@@ -17,6 +17,7 @@ from common.factor_expansion_research import (
 )
 from common.config import DashboardStrategyConfig, strategy_config_from_dict
 from common.trade_metrics import capital_gain_trade_metrics
+from common.frame_store import frame_exists, read_frame, write_frame
 
 
 ROOT = Path(__file__).resolve().parent
@@ -34,9 +35,9 @@ def run_factor_expansion_rolling(
     """Run every factor-version/objective/frequency rolling track for a study."""
     root = Path(root).resolve()
     static_dir = Path(static_dir).resolve()
-    if not (static_dir / "静态研究汇总.csv").exists():
+    if not frame_exists(static_dir / "静态研究汇总.csv"):
         raise ValueError("static-dir 不包含已完成的静态研究汇总")
-    static_summary = pd.read_csv(static_dir / "静态研究汇总.csv", encoding="utf-8-sig")
+    static_summary = read_frame(static_dir / "静态研究汇总.csv")
     manifest_path = static_dir / "研究清单.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
     if base_config is None and isinstance(manifest.get("研究基线"), dict):
@@ -86,8 +87,8 @@ def run_factor_expansion_rolling(
                 )
                 if factor_version == "原始因子":
                     original_period_results[(objective_name, frequency)] = periods.copy()
-                periods.to_csv(output / f"{label}_逐期定参.csv", index=False, encoding="utf-8-sig")
-                daily.to_csv(output / f"{label}_样本外日度.csv", index=False, encoding="utf-8-sig")
+                write_frame(periods, output / f"{label}_逐期定参.csv")
+                write_frame(daily, output / f"{label}_样本外日度.csv")
                 if not periods.empty:
                     first = periods.iloc[0]
                     first_config = ExpansionResearchConfig(
@@ -107,8 +108,8 @@ def run_factor_expansion_rolling(
                     search_daily, search_signals, _, _ = evaluate_expansion_config(
                         root, first_config, str(first["训练起始日"]), str(first["训练截止日"])
                     )
-                    search_daily.to_csv(output / f"{label}_搜索期日度.csv", index=False, encoding="utf-8-sig")
-                    search_signals.to_csv(output / f"{label}_搜索期信号.csv", index=False, encoding="utf-8-sig")
+                    write_frame(search_daily, output / f"{label}_搜索期日度.csv")
+                    write_frame(search_signals, output / f"{label}_搜索期信号.csv")
                 metrics = capital_gain_trade_metrics(daily, "strategy_capital_bp", position_col="仓位")
                 summary.append({
                     "因子版本": factor_version,
@@ -129,7 +130,7 @@ def run_factor_expansion_rolling(
                     "样本外最大回撤_BP": metrics.get("capital_gain_max_drawdown_bp"),
                 })
     frame = pd.DataFrame(summary)
-    frame.to_csv(output / "滚动定参汇总.csv", index=False, encoding="utf-8-sig")
+    write_frame(frame, output / "滚动定参汇总.csv")
     rolling_contract = {
         "训练方式": "自首个可用数据日扩展",
         "最低训练长度月数": DEFAULT_MINIMUM_TRAINING_MONTHS,

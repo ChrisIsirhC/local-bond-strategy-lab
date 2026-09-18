@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from common.config import DashboardStrategyConfig, strategy_config_from_dict
+from common.result_store import rolling_reproduction_dir, read_rolling_reproduction_manifest
+from common.strategy_repository import strategy_id_for_archive
 
 
 MISSING_PROVENANCE = "该策略尚未登记研究溯源。"
@@ -126,7 +128,7 @@ def _rolling_search_label(manifest: dict[str, Any], base: DashboardStrategyConfi
 
 
 def _enrich_legacy_rolling_provenance(
-    provenance: dict[str, Any], root: Path
+    provenance: dict[str, Any], root: Path, experiment_dir: Path | None = None
 ) -> dict[str, Any]:
     """Repair only the *displayed* lineage of old rolling archives.
 
@@ -151,6 +153,16 @@ def _enrich_legacy_rolling_provenance(
     if not output_path:
         return provenance
     rolling_dir = root / str(output_path)
+    # The execution workspace is merely a compatibility source.  A rendered
+    # archive knows its immutable strategy ID, so prefer the compact replay
+    # contract that was saved alongside Parquet results.
+    if experiment_dir is not None:
+        strategy_id = strategy_id_for_archive(root, Path(experiment_dir).name)
+        if strategy_id:
+            candidate = rolling_reproduction_dir(root, strategy_id)
+            contract = read_rolling_reproduction_manifest(root, strategy_id)
+            if (candidate / "基线配置.json").exists() and isinstance(contract.get("manifest"), dict):
+                rolling_dir = candidate
     base_path = rolling_dir / "基线配置.json"
     manifest_path = rolling_dir / "滚动配置.json"
     try:
@@ -158,6 +170,8 @@ def _enrich_legacy_rolling_provenance(
         base = strategy_config_from_dict(base_raw)
         parent = base.research_provenance
         manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
+        if isinstance(manifest.get("manifest"), dict):
+            manifest = manifest["manifest"]
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
         return provenance
     if not isinstance(parent, dict) or not parent.get("origin"):
@@ -268,7 +282,9 @@ def display_provenance(
     config: DashboardStrategyConfig, root: Path, experiment_dir: Path | None = None
 ) -> dict[str, Any] | None:
     if config.research_provenance:
-        provenance = _enrich_legacy_rolling_provenance(deepcopy(config.research_provenance), root)
+        provenance = _enrich_legacy_rolling_provenance(
+            deepcopy(config.research_provenance), root, experiment_dir
+        )
         return _enrich_legacy_factor_provenance(provenance, root)
     # Read-only enrichment: require a registered identity AND identical parameters.
     for path in sorted((root / "configs" / "baselines").glob("*.json")):

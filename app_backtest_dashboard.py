@@ -25,9 +25,16 @@ from common.config import (
 )
 from common.combined_research import run_combined_search
 from common.experiments import archive_dashboard_experiment, archive_id_prefix, list_experiments, load_experiment_result
-from common.market_data import CONDITIONAL_BENCHMARK_NAME, GOV_10Y, load_market_data, market_date_bounds
+from common.market_data import CONDITIONAL_BENCHMARK_NAME, GOV_10Y, curve_path, load_market_data, market_date_bounds
 from common.period_evaluation import DEFAULT_TRAINING_END, evaluate_period, evaluate_periods, generalization_summary
 from common.performance import performance_metrics
+from common.result_store import (
+    read_archive_frame,
+    rolling_reproduction_dir,
+    read_rolling_reproduction_manifest,
+    write_rolling_reproduction_bundle,
+)
+from common.strategy_repository import strategy_id_for_archive
 from common.provenance import (
     MISSING_PROVENANCE,
     UNKNOWN_HISTORY,
@@ -37,7 +44,7 @@ from common.provenance import (
     record_manual_changes,
     record_step,
 )
-from common.reporting import _build_period_diagnostics
+from common.reporting import _build_period_diagnostics, build_strategy_html_report
 from common.runner import run_dashboard_config
 from common.runner import run_dashboard_weight_search_v1, run_dashboard_weight_search_v2
 from common.rolling_research import RollingResearchConfig, run_rolling_research
@@ -47,6 +54,8 @@ from common.trade_metrics import capital_gain_trade_metrics, capital_gain_trade_
 from common.factor_expansion_features import ALL_FACTOR_COLUMNS, BASE_FACTOR_COLUMNS, EXPANDED_FACTOR_COLUMNS, FACTOR_DISPLAY_COLUMNS, FACTOR_GROUPS, FACTOR_LABELS
 from common.factor_expansion_research import OBJECTIVES, ROOT_POSITIONS, ROOT_THRESHOLDS, ExpansionResearchConfig, build_expansion_signals
 from common.factor_expansion_research import rebuild_expansion_stitched_cumulatives
+from common.factor_rolling_task import run_factor_rolling_task
+from common.frame_store import frame_exists, read_frame
 from run_factor_expansion_research import run_factor_expansion_static_research
 from run_factor_expansion_rolling import run_factor_expansion_rolling
 from strategies.dashboard_signal_v1 import DashboardThresholds, DashboardWeights, FactorWindowConfig, build_dashboard_signal, signal_file_for_frequency
@@ -1606,8 +1615,12 @@ def _run_backtest(config: DashboardStrategyConfig) -> Path | None:
             is_rolling_archive = _is_rolling_provenance(provenance) or (
                 source_archive is not None and _is_rolling_archive(source_archive, provenance)
             )
+            factor_archive_type = str(provenance.get("研究类型", "")) if isinstance(provenance, dict) else ""
+            is_factor_rolling_archive = factor_archive_type in {"因子完整滚动定参归档", "因子完整滚动定参"}
             if is_factor_archive:
                 daily, signals, strategy_metrics, benchmark_metrics, experiment_dir = _rerun_factor_archive(config)
+            elif is_factor_rolling_archive:
+                daily, signals, strategy_metrics, benchmark_metrics, experiment_dir = _rerun_factor_rolling_archive(config)
             elif is_rolling_archive:
                 daily, signals, strategy_metrics, benchmark_metrics, experiment_dir = _rerun_rolling_archive(config)
             else:
@@ -1677,6 +1690,16 @@ def _rolling_output_dir_from_archive(experiment_dir: Path) -> Path | None:
     return candidate if candidate.is_dir() else None
 
 
+def _rolling_reproduction_dir_from_archive(experiment_dir: Path) -> Path | None:
+    """Resolve the strategy-owned replay contract before any old workspace."""
+    strategy_id = strategy_id_for_archive(ROOT, experiment_dir.name)
+    if not strategy_id:
+        return None
+    candidate = rolling_reproduction_dir(ROOT, strategy_id)
+    required = ("滚动配置.json", "基线配置.json", "逐期定参与样本外表现.csv")
+    return candidate if candidate.is_dir() and all((candidate / name).is_file() for name in required) else None
+
+
 def _is_rolling_archive(experiment_dir: Path, provenance: object) -> bool:
     """Recognize old rolling archives whose config predates provenance recording."""
     if _is_rolling_provenance(provenance):
@@ -1698,7 +1721,7 @@ def _rolling_archive_dir_from_config(config: DashboardStrategyConfig) -> Path | 
 
 def _latest_rolling_period_config(experiment_dir: Path) -> DashboardStrategyConfig | None:
     """Load the last selected rolling parameters; never trigger a new search here."""
-    output_dir = _rolling_output_dir_from_archive(experiment_dir)
+    output_dir = _rolling_reproduction_dir_from_archive(experiment_dir) or _rolling_output_dir_from_archive(experiment_dir)
     if output_dir is None:
         return None
     config_file: Path | None = None
@@ -1725,6 +1748,43 @@ def _latest_rolling_period_config(experiment_dir: Path) -> DashboardStrategyConf
         return None
 
 
+def _signal_input_version(signal_frequency: str) -> tuple[int, int, int, int]:
+    """Version only the two source files used by standard dashboard signals."""
+    signal_path = ROOT / signal_file_for_frequency(signal_frequency)
+    market_path = curve_path(ROOT, GOV_10Y)
+    signal_stat = signal_path.stat()
+    market_stat = market_path.stat()
+    return (
+        int(signal_stat.st_mtime_ns), int(signal_stat.st_size),
+        int(market_stat.st_mtime_ns), int(market_stat.st_size),
+    )
+
+
+@st.cache_data(show_spinner=False)
+def _cached_dashboard_signal_grid(
+    config_payload: str,
+    _source_version: tuple[int, int, int, int],
+) -> pd.DataFrame:
+    """Avoid rebuilding the full live signal grid on every Streamlit click."""
+    config = strategy_config_from_dict(json.loads(config_payload))
+    return build_dashboard_signal(
+        ROOT,
+        weights=config.weights,
+        thresholds=config.thresholds,
+        position_policy=config.positions,
+        factor_windows=config.factor_windows,
+        signal_frequency=config.signal_frequency,
+    )
+
+
+def _cached_current_dashboard_signals(config: DashboardStrategyConfig) -> pd.DataFrame:
+    payload = json.dumps(config.as_dict(), ensure_ascii=False, sort_keys=True, default=str)
+    try:
+        return _cached_dashboard_signal_grid(payload, _signal_input_version(config.signal_frequency)).copy(deep=True)
+    except (OSError, ValueError, KeyError, TypeError):
+        raise
+
+
 def _current_rolling_signals(
     experiment_dir: Path,
     archived_signals: pd.DataFrame,
@@ -1742,14 +1802,7 @@ def _current_rolling_signals(
     if pd.isna(archive_latest):
         return None, selected
     try:
-        current = build_dashboard_signal(
-            ROOT,
-            weights=selected.weights,
-            thresholds=selected.thresholds,
-            position_policy=selected.positions,
-            factor_windows=selected.factor_windows,
-            signal_frequency=selected.signal_frequency,
-        )
+        current = _cached_current_dashboard_signals(selected)
     except (OSError, ValueError, KeyError, TypeError):
         return None, selected
     current = current.loc[pd.to_datetime(current["signal_date"], errors="coerce") >= archive_latest].copy()
@@ -1850,14 +1903,7 @@ def _current_fixed_strategy_signals(
 ) -> pd.DataFrame | None:
     """Fill an old fixed archive's latest factor view from its frozen parameters."""
     try:
-        current = build_dashboard_signal(
-            ROOT,
-            weights=config.weights,
-            thresholds=config.thresholds,
-            position_policy=config.positions,
-            factor_windows=config.factor_windows,
-            signal_frequency=config.signal_frequency,
-        )
+        current = _cached_current_dashboard_signals(config)
     except (OSError, ValueError, KeyError, TypeError):
         return None
     return _merge_current_signal_tail(archived_signals, current)
@@ -1896,17 +1942,52 @@ def _rerun_rolling_archive(
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, object], dict[str, object], Path]:
     """Re-run a rolling archive using its recorded window/search contract."""
     provenance = config.research_provenance or {}
+    archive_dir = _rolling_archive_dir_from_config(config)
+    replay_dir = _rolling_reproduction_dir_from_archive(archive_dir) if archive_dir is not None else None
+    manifest: dict[str, object] = {}
+    resume_dir: Path | None = None
+    if replay_dir is not None:
+        strategy_id = strategy_id_for_archive(ROOT, archive_dir.name) if archive_dir is not None else None
+        contract = read_rolling_reproduction_manifest(ROOT, strategy_id) if strategy_id else {}
+        saved_manifest = contract.get("manifest") if isinstance(contract, dict) else None
+        if isinstance(saved_manifest, dict):
+            manifest = saved_manifest
+            resume_dir = replay_dir
     step = _rolling_provenance_step(provenance)
     output = step.get("output", {}) if isinstance(step, dict) and isinstance(step.get("output"), dict) else {}
     output_path = str(output.get("path", ""))
     manifest_path = ROOT / output_path / "滚动配置.json" if output_path else None
-    if manifest_path is None or not manifest_path.exists():
-        archive_dir = _rolling_archive_dir_from_config(config)
-        output_dir = _rolling_output_dir_from_archive(archive_dir) if archive_dir is not None else None
-        manifest_path = output_dir / "滚动配置.json" if output_dir is not None else None
-    if manifest_path is None or not manifest_path.exists():
-        raise ValueError("滚动定参原始清单不存在，无法按原窗口复现")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not manifest:
+        if manifest_path is None or not manifest_path.exists():
+            archive_dir = _rolling_archive_dir_from_config(config)
+            output_dir = _rolling_output_dir_from_archive(archive_dir) if archive_dir is not None else None
+            manifest_path = output_dir / "滚动配置.json" if output_dir is not None else None
+        if manifest_path is not None and manifest_path.exists():
+            try:
+                payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+                manifest = payload if isinstance(payload, dict) else {}
+                resume_dir = manifest_path.parent
+                # Opportunistically repair an old archive while its legacy
+                # workspace is still available; future reruns no longer rely
+                # on that workspace.
+                if archive_dir is not None:
+                    strategy_id = strategy_id_for_archive(ROOT, archive_dir.name)
+                    if strategy_id:
+                        bundle = write_rolling_reproduction_bundle(
+                            ROOT,
+                            strategy_id,
+                            rolling_dir=manifest_path.parent,
+                            archive_config_path=archive_dir / "config.json",
+                        )
+                        if bundle is not None:
+                            resume_dir = bundle
+            except (OSError, ValueError, TypeError, json.JSONDecodeError):
+                manifest = {}
+    if not manifest or resume_dir is None:
+        raise ValueError(
+            "滚动定参复现合同缺失：需要已归档的逐期参数、基线配置和滚动设置；"
+            "旧滚动工作目录也不可用。请先执行滚动归档迁移。"
+        )
     search_mode = str(manifest.get("搜索模式", "combined"))
     training_mode = str(manifest.get("训练方式", "expanding"))
     interval_text = str(manifest.get("定参频率", "3 months")).split()
@@ -1924,12 +2005,147 @@ def _rerun_rolling_archive(
         min_objective_improvement=float(manifest.get("最小目标函数改善阈值", 0.0) or 0.0),
         weight_search_version=str(manifest.get("权重搜索版本", "v2")),
         minimum_training_months=manifest.get("最低训练长度月数"),
-        resume_from=manifest_path.parent,
+        resume_from=resume_dir,
     )
     result = run_rolling_research(ROOT, rolling_config, progress=st.write)
     experiment_dir = Path(str(result["experiment_dir"]))
     daily, signals, strategy_metrics, benchmark_metrics, _ = load_experiment_result(experiment_dir)
     return daily, signals, strategy_metrics, benchmark_metrics, experiment_dir
+
+
+def _rerun_factor_rolling_archive(
+    config: DashboardStrategyConfig,
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, object], dict[str, object], Path]:
+    """Replay a factor rolling archive from its strategy-owned period values.
+
+    Factor rolling periods store the selected weight vector and thresholds in
+    the period table itself, unlike ordinary rolling research which stores a
+    JSON strategy file for each period.  They must never be sent through the
+    ordinary rolling runner.
+    """
+    archive_dir = _rolling_archive_dir_from_config(config)
+    if archive_dir is None:
+        raise ValueError("因子滚动归档缺少策略来源，无法定位已保存的逐期参数")
+    strategy_id = strategy_id_for_archive(ROOT, archive_dir.name)
+    replay_dir = _rolling_reproduction_dir_from_archive(archive_dir)
+    manifest: dict[str, object] = {}
+    periods = pd.DataFrame()
+    if replay_dir is not None and strategy_id:
+        contract = read_rolling_reproduction_manifest(ROOT, strategy_id)
+        saved = contract.get("manifest") if isinstance(contract, dict) else None
+        if isinstance(saved, dict):
+            manifest = saved
+        try:
+            periods = pd.read_csv(replay_dir / "逐期定参与样本外表现.csv", encoding="utf-8-sig")
+        except (OSError, ValueError, UnicodeDecodeError):
+            periods = pd.DataFrame()
+    if periods.empty:
+        legacy_dir = _rolling_output_dir_from_archive(archive_dir)
+        if legacy_dir is not None:
+            try:
+                manifest = json.loads((legacy_dir / "滚动配置.json").read_text(encoding="utf-8"))
+                periods = pd.read_csv(legacy_dir / "逐期定参与样本外表现.csv", encoding="utf-8-sig")
+            except (OSError, ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
+                periods = pd.DataFrame()
+            if not periods.empty and strategy_id:
+                write_rolling_reproduction_bundle(
+                    ROOT,
+                    strategy_id,
+                    rolling_dir=legacy_dir,
+                    archive_config_path=archive_dir / "config.json",
+                )
+    if periods.empty or "权重" not in periods:
+        raise ValueError("因子滚动复现合同缺失：需要归档的逐期权重、阈值和窗口记录")
+    provenance = config.research_provenance or {}
+    enabled = manifest.get("启用因子", ()) if isinstance(manifest, dict) else ()
+    if not enabled and isinstance(provenance, dict):
+        enabled = provenance.get("因子集合", ())
+    enabled = tuple(str(value) for value in enabled if str(value) in ALL_FACTOR_COLUMNS)
+    if not enabled:
+        raise ValueError("因子滚动复现合同缺少启用因子集合")
+    objective = str(manifest.get("搜索目标", "")) if isinstance(manifest, dict) else ""
+    if objective not in OBJECTIVES:
+        objective = next((name for name, item in OBJECTIVES.items() if item == config.objective), "收益")
+    frequency = str(manifest.get("信号频率", config.signal_frequency)) if isinstance(manifest, dict) else config.signal_frequency
+    if frequency not in {"daily", "weekly"}:
+        frequency = config.signal_frequency
+    factor_version = str(manifest.get("因子版本", "自选因子")) if isinstance(manifest, dict) else "自选因子"
+    raw = {
+        "base_config": replace(config, backtest_start=None, backtest_end=None).as_dict(),
+        "enabled_factor_columns": list(enabled),
+        "objective_name": objective,
+        "signal_frequency": frequency,
+        "factor_version": factor_version,
+        "minimum_training_months": int(manifest.get("最低训练长度月数", 24) or 24),
+        "recalibration_months": int(manifest.get("定参频率月数", 3) or 3),
+        "task_name": f"因子完整滚动复现·{config.name}",
+    }
+    result = run_factor_rolling_task(ROOT, raw, replay_periods=periods, progress=st.write)
+    experiment_dir = Path(str(result["experiment_dir"]))
+    daily, signals, strategy_metrics, benchmark_metrics, _ = load_experiment_result(experiment_dir)
+    return daily, signals, strategy_metrics, benchmark_metrics, experiment_dir
+
+
+def _render_factor_rolling_period_switcher(
+    experiment_dir: Path,
+    daily: pd.DataFrame,
+    signals: pd.DataFrame,
+) -> None:
+    """Let a factor rolling result inspect one frozen OOS period at a time."""
+    try:
+        periods = read_archive_frame(experiment_dir, "rolling_periods")
+    except (OSError, ValueError, FileNotFoundError):
+        return
+    if periods.empty or "期数" not in periods.columns:
+        return
+    st.markdown(
+        "<div class='section-head compact'><h3>因子完整滚动 · 逐期结果</h3>"
+        "<p>搜索期参数和样本外区间来自该归档保存的逐期记录；输入期数、训练截止日或样本外日期即可切换。</p></div>",
+        unsafe_allow_html=True,
+    )
+    query = st.text_input(
+        "搜索滚动期",
+        value="",
+        placeholder="例如：3、2025-04-17 或 2025-04",
+        key=f"factor_rolling_period_search_{experiment_dir.name}",
+    ).strip().lower()
+    display = periods.copy()
+    if query:
+        mask = pd.Series(False, index=display.index)
+        for column in ("期数", "训练截止日", "样本外起始日", "样本外结束日"):
+            if column in display.columns:
+                mask = mask | display[column].astype(str).str.lower().str.contains(query, regex=False, na=False)
+        display = display.loc[mask]
+    if display.empty:
+        st.info("没有匹配的滚动期。")
+        return
+    options = [str(value) for value in display["期数"].tolist()]
+    selected = st.selectbox(
+        "查看期数",
+        options,
+        format_func=lambda value: f"第 {value} 期",
+        key=f"factor_rolling_period_choice_{experiment_dir.name}",
+    )
+    row = display.loc[display["期数"].astype(str) == str(selected)].iloc[0]
+    start = pd.to_datetime(row.get("样本外起始日"), errors="coerce")
+    end = pd.to_datetime(row.get("样本外结束日"), errors="coerce")
+    st.caption(
+        f"训练：{row.get('训练起始日', '—')} 至 {row.get('训练截止日', '—')} · "
+        f"样本外：{row.get('样本外起始日', '—')} 至 {row.get('样本外结束日', '—')}"
+    )
+    period_columns = [
+        column for column in (
+            "期数", "训练起始日", "训练截止日", "样本外起始日", "样本外结束日",
+            "累计资本利得_BP", "资本利得超额_BP", "资本利得交易胜率", "平均每笔盈利_BP",
+        ) if column in row.index
+    ]
+    st.dataframe(pd.DataFrame([{column: row[column] for column in period_columns}]), hide_index=True, use_container_width=True)
+    if pd.notna(start) and pd.notna(end):
+        period_daily = daily.loc[pd.to_datetime(daily.get("date"), errors="coerce").between(start, end)].copy()
+        period_signals = signals.loc[pd.to_datetime(signals.get("signal_date"), errors="coerce").between(start, end)].copy()
+        if not period_daily.empty:
+            strategy, benchmark = _factor_detail_metrics(period_daily)
+            _render_summary(strategy, benchmark, period_signals)
 
 
 def _rerun_factor_archive(
@@ -2731,8 +2947,8 @@ def _factor_studies() -> list[Path]:
     if not root.exists():
         return []
     studies = sorted(
-        [path for path in root.iterdir() if path.is_dir() and (path / "研究清单.json").exists() and (path / "静态研究汇总.csv").exists()],
-        key=lambda path: path.stat().st_mtime,
+        [path for path in root.iterdir() if path.is_dir() and (path / "研究清单.json").exists() and frame_exists(path / "静态研究汇总.csv")],
+        key=lambda path: path.name,
         reverse=True,
     )
     return studies
@@ -2781,16 +2997,16 @@ def _factor_objective_copy(objective: str) -> str:
 def _factor_summary(study_dir: Path, mode: str) -> pd.DataFrame:
     if mode == "滚动样本外":
         path = study_dir / "滚动定参" / "滚动定参汇总.csv"
-        if not path.exists():
+        if not frame_exists(path):
             return pd.DataFrame()
-        frame = pd.read_csv(path, encoding="utf-8-sig")
+        frame = read_frame(path)
         return frame.rename(columns={
             "样本外累计资本利得_BP": "资本利得_BP",
             "样本外交易胜率": "交易胜率",
             "样本外已平仓交易数": "已平仓交易数",
             "样本外最大回撤_BP": "最大回撤_BP",
         })
-    frame = pd.read_csv(study_dir / "静态研究汇总.csv", encoding="utf-8-sig")
+    frame = read_frame(study_dir / "静态研究汇总.csv")
     if "训练目标函数" not in frame.columns:
         required = {
             "训练累计资本利得_BP", "训练资本利得超额_BP", "训练交易胜率", "训练最大回撤_BP",
@@ -2974,9 +3190,9 @@ def _factor_capital_comparison_chart(study_dir: Path, objective: str, frequency:
     figure = go.Figure()
     for version, color in (("原始因子", INK), ("扩展因子", GOLD)):
         path = _factor_daily_path(study_dir, _factor_stem(version, objective, frequency), mode)
-        if not path.exists():
+        if not frame_exists(path):
             continue
-        daily = pd.read_csv(path, encoding="utf-8-sig", parse_dates=["date"])
+        daily = read_frame(path, parse_dates=["date"])
         figure.add_trace(go.Scatter(
             x=daily["date"], y=pd.to_numeric(daily["strategy_capital_cum_bp"], errors="coerce"),
             mode="lines", name=version, line={"color": color, "width": 2.5},
@@ -3206,12 +3422,18 @@ def _render_factor_expansion_launch_panel() -> None:
         )
     with right:
         run_scope = st.segmented_control(
-            "执行范围", ["仅静态研究", "直接加入滚动定参队列"], default="仅静态研究", key="factor_expansion_scope"
+            "执行范围",
+            ["仅静态研究", "剪枝快速验证", "完整滚动定参"],
+            default="仅静态研究",
+            key="factor_expansion_scope",
+            help="剪枝快速验证只在当前页面执行，不进入队列；完整滚动定参才会进入滚动定参页面的队列。",
         )
     if run_scope == "仅静态研究":
         st.caption("仅执行一次因子权重搜索和总分入场阈值搜索；参数选定后，在训练截止日之后的样本外区间保持不变。")
+    elif run_scope == "剪枝快速验证":
+        st.caption("使用当前因子研究的剪枝候选快速验证，不进入滚动任务队列；结果完成后可打开对应 F 归档。")
     else:
-        st.caption("不先生成静态 F 研究归档。当前因子集合、目标、频率和执行规则会直接冻结并加入滚动任务队列；每期从训练窗口重新搜索。")
+        st.caption("使用完整可行权重组合滚动定参，进入滚动定参页面队列；每期从训练窗口重新搜索，完成后右上角提示。")
     selected_objectives: tuple[str, ...] = tuple(OBJECTIVES)
     selected_frequencies: tuple[str, ...] = ("daily", "weekly")
     factor_base: DashboardStrategyConfig | None = None
@@ -3251,12 +3473,12 @@ def _render_factor_expansion_launch_panel() -> None:
     st.markdown("<div class='section-head compact'><h3>事前因子筛选</h3><p>在运行前明确哪些因子进入搜索。取消启用后，该因子不会进入权重或阈值搜索；启用后仍允许搜索赋为0。</p></div>", unsafe_allow_html=True)
     _render_factor_preselection_controls()
     enabled_factor_columns, _, _ = _factor_preselection_state()
-    st.caption("静态研究完成后会展示在本页下方；直接滚动验证完成后会作为独立 R 策略归档到历史实验。")
+    st.caption("静态研究完成后会展示在本页下方；完整滚动定参会进入滚动任务队列，并作为独立 F 策略归档。")
     if st.button("运行因子增加研究", type="primary", use_container_width=True, key="run_factor_expansion_web"):
         if not enabled_factor_columns:
             st.error("请至少启用一个因子后再运行。")
             return
-        if run_scope == "直接加入滚动定参队列":
+        if run_scope in {"剪枝快速验证", "完整滚动定参"}:
             comparison_ready = _is_factor_comparison_universe(enabled_factor_columns)
             factor_version = "扩展因子" if comparison_ready else "自选因子"
             if factor_base is None:
@@ -3286,7 +3508,7 @@ def _render_factor_expansion_launch_panel() -> None:
                             objective=OBJECTIVES[selected_objective],
                             signal_frequency=selected_frequency,
                         )
-                        tasks.append(enqueue_factor_rolling_task(ROOT, {
+                        payload = {
                             "task_name": direct_task_name,
                             "base_config": queue_base.as_dict(),
                             "objective_name": selected_objective,
@@ -3296,15 +3518,31 @@ def _render_factor_expansion_launch_panel() -> None:
                             "minimum_training_months": 24,
                             "recalibration_months": 3,
                             "beam_width": 160,
-                        }))
-                worker_started = start_rolling_queue_worker(ROOT)
+                            "execution_mode": "complete" if run_scope == "完整滚动定参" else "pruned",
+                        }
+                        if run_scope == "完整滚动定参":
+                            tasks.append(enqueue_factor_rolling_task(ROOT, payload))
+                        else:
+                            with st.status(f"正在进行剪枝快速验证：{direct_task_name}", expanded=True) as status:
+                                result = run_factor_rolling_task(
+                                    ROOT,
+                                    payload,
+                                    progress=lambda message, completed, total: status.write(str(message)),
+                                )
+                                status.update(label="剪枝快速验证完成", state="complete", expanded=False)
+                            experiment_dir = Path(str(result.get("experiment_dir")))
+                            st.success(f"剪枝快速验证已完成：{experiment_dir.name}")
+                            st.page_link(f"/history?experiment={quote(experiment_dir.name)}", label="打开结果", icon="↗")
+                worker_started = start_rolling_queue_worker(ROOT) if run_scope == "完整滚动定参" else False
             except (OSError, ValueError, TimeoutError) as exc:
-                st.error(f"未能加入因子滚动队列：{exc}")
+                st.error(f"因子研究执行失败：{exc}")
                 return
-            if len(tasks) == 1 and (tasks[0].get("status") == "启动中" or worker_started):
-                st.success(f"已直接开始因子滚动验证：{tasks[0]['task_id']}。")
-            else:
-                st.success(f"已加入 {len(tasks)} 条因子滚动任务；首条为 {tasks[0]['task_id']}，将按队列顺序执行。")
+            if run_scope == "完整滚动定参":
+                if len(tasks) == 1 and (tasks[0].get("status") == "启动中" or worker_started):
+                    st.success(f"已加入完整滚动定参：{tasks[0]['task_id']}。")
+                else:
+                    st.success(f"已加入 {len(tasks)} 条完整滚动定参任务；队列最多并行 2 个。")
+                st.page_link("/rolling", label="去滚动定参查看队列", icon="↗")
             return
         with st.status("正在生成研究快照...", expanded=True) as status:
             try:
@@ -3390,7 +3628,7 @@ def _archive_single_factor_expansion_result(
     config_path = study_dir / f"{stem}_最终配置.json"
     daily_path = study_dir / f"{stem}_样本外日度.csv"
     signals_path = study_dir / f"{stem}_样本外信号.csv"
-    if not all(path.exists() for path in (config_path, daily_path, signals_path)):
+    if not config_path.exists() or not frame_exists(daily_path) or not frame_exists(signals_path):
         raise FileNotFoundError("单一策略对缺少归档所需的配置、日度或信号文件")
     payload = json.loads(config_path.read_text(encoding="utf-8"))
     factor_weights = {str(key): float(value) for key, value in payload.get("权重", {}).items()}
@@ -3488,7 +3726,7 @@ def _render_factor_research_page() -> None:
     with scope_a:
         study_dir = st.selectbox("研究批次", studies, index=default_index, format_func=_factor_study_label, key="factor_study_choice")
     with scope_b:
-        study_has_rolling = (study_dir / "滚动定参" / "滚动定参汇总.csv").exists()
+        study_has_rolling = frame_exists(study_dir / "滚动定参" / "滚动定参汇总.csv")
         mode_options = ["固定参数", "动态定参"] if study_has_rolling else ["固定参数"]
         requested_mode = str(st.query_params.get("result_mode", "静态样本外"))
         default_mode = "动态定参" if requested_mode == "滚动样本外" and study_has_rolling else "固定参数"
@@ -3503,7 +3741,7 @@ def _render_factor_research_page() -> None:
             key=mode_key,
         )
     manifest = _load_factor_manifest(study_dir)
-    rolling_exists = (study_dir / "滚动定参" / "滚动定参汇总.csv").exists()
+    rolling_exists = frame_exists(study_dir / "滚动定参" / "滚动定参汇总.csv")
     mode = "滚动样本外" if mode_label == "动态定参" else "静态样本外"
     if mode == "滚动样本外":
         st.caption("从满足24个月最低训练长度的日期开始，每3个月扩大训练区间并重新搜索参数；展示的是逐段拼接的样本外结果。")
@@ -3660,8 +3898,8 @@ def _render_factor_route_evidence(study_dir: Path, factor_version: str, objectiv
     disabled = {str(key) for key in config.get("事前停用因子", [])}
     rolling_path = study_dir / "滚动定参" / f"{stem}_逐期定参.csv"
     rolling_weights: list[dict[str, float]] = []
-    if rolling_path.exists() and mode == "滚动样本外":
-        periods = pd.read_csv(rolling_path, encoding="utf-8-sig")
+    if frame_exists(rolling_path) and mode == "滚动样本外":
+        periods = read_frame(rolling_path)
         for raw in periods["权重"]:
             rolling_weights.append({str(key): float(value) for key, value in json.loads(raw).items()})
     rows = []
@@ -3702,9 +3940,9 @@ def _render_factor_route_evidence(study_dir: Path, factor_version: str, objectiv
     st.markdown("#### 因子筛选证据")
     st.caption("事前停用表示该因子从未进入搜索；固定参数权重为0则表示进入搜索后被筛掉。动态定参使用期数显示每次重搜后实际被保留的次数。")
     _render_theme_table(pd.DataFrame(rows), qualitative_column="选择结论", row_class_column="_row_class", scrollable=True)
-    if rolling_path.exists() and mode == "滚动样本外":
+    if frame_exists(rolling_path) and mode == "滚动样本外":
         with st.expander("查看逐期定参与权重"):
-            periods = pd.read_csv(rolling_path, encoding="utf-8-sig")
+            periods = read_frame(rolling_path)
             _render_theme_table(periods, numeric_columns=set(periods.columns), scrollable=True, wide=True)
 
 
@@ -3718,7 +3956,8 @@ def _render_factor_replay_and_artifacts(study_dir: Path, manifest: dict[str, obj
         if report_path.exists():
             st.link_button("打开完整研究报告", report_path.as_uri(), use_container_width=True)
     with info_b:
-        st.download_button("下载比较结果（CSV）", summary_path.read_bytes(), file_name=summary_path.name, mime="text/csv", use_container_width=True)
+        summary = read_frame(summary_path)
+        st.download_button("下载比较结果（CSV）", summary.to_csv(index=False).encode("utf-8-sig"), file_name=summary_path.name, mime="text/csv", use_container_width=True)
     with info_c:
         st.download_button("下载研究清单（JSON）", manifest_path.read_bytes(), file_name=manifest_path.name, mime="application/json", use_container_width=True)
 
@@ -3778,23 +4017,23 @@ def _render_factor_strategy_history(study_name: str) -> None:
     stem = _factor_stem(version, objective, frequency)
     daily_path = _factor_daily_path(study_dir, stem, mode)
     config_path = study_dir / f"{stem}_最终配置.json"
-    if not daily_path.exists():
+    if not frame_exists(daily_path):
         st.error("该路线没有可展示的日度结果文件，请重新运行研究。")
         return
     rolling_training_end: str | None = None
     if mode == "静态样本外":
         daily, signals = _load_factor_static_full_history(study_dir, stem)
     else:
-        daily = pd.read_csv(daily_path, encoding="utf-8-sig", parse_dates=["date"])
+        daily = read_frame(daily_path, parse_dates=["date"])
         signals = _factor_detail_signals(study_dir, stem, daily, mode)
         rolling_search_daily_path = study_dir / "滚动定参" / f"{stem}_搜索期日度.csv"
         rolling_search_signal_path = study_dir / "滚动定参" / f"{stem}_搜索期信号.csv"
         rolling_period_path = study_dir / "滚动定参" / f"{stem}_逐期定参.csv"
-        if rolling_search_daily_path.exists() and rolling_search_signal_path.exists() and rolling_period_path.exists():
-            search_daily = pd.read_csv(rolling_search_daily_path, encoding="utf-8-sig", parse_dates=["date", "signal_date"])
+        if all(frame_exists(path) for path in (rolling_search_daily_path, rolling_search_signal_path, rolling_period_path)):
+            search_daily = read_frame(rolling_search_daily_path, parse_dates=["date", "signal_date"])
             daily = pd.concat([search_daily, daily], ignore_index=True).drop_duplicates("date", keep="last").sort_values("date").reset_index(drop=True)
             daily = rebuild_expansion_stitched_cumulatives(daily)
-            search_signals = pd.read_csv(rolling_search_signal_path, encoding="utf-8-sig", parse_dates=["signal_date"])
+            search_signals = read_frame(rolling_search_signal_path, parse_dates=["signal_date"])
             signals = pd.concat([search_signals, signals], ignore_index=True)
             # CSV archives from older runs may leave one side as plain text
             # while the other is parsed as Timestamp. Normalize before any
@@ -3807,7 +4046,7 @@ def _render_factor_strategy_history(study_name: str) -> None:
                 .sort_values("signal_date")
                 .reset_index(drop=True)
             )
-            first_period = pd.read_csv(rolling_period_path, encoding="utf-8-sig").iloc[0]
+            first_period = read_frame(rolling_period_path).iloc[0]
             rolling_training_end = str(first_period["训练截止日"])
     payload = json.loads(config_path.read_text(encoding="utf-8")) if config_path.exists() else {}
     strategy_metrics, benchmark_metrics = _factor_detail_metrics(daily)
@@ -3854,15 +4093,15 @@ def _render_factor_strategy_history(study_name: str) -> None:
 def _load_factor_static_full_history(study_dir: Path, stem: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     daily_paths = [study_dir / f"{stem}_训练期日度.csv", study_dir / f"{stem}_样本外日度.csv"]
     signal_paths = [study_dir / f"{stem}_训练期信号.csv", study_dir / f"{stem}_样本外信号.csv"]
-    if not all(path.exists() for path in daily_paths + signal_paths):
+    if not all(frame_exists(path) for path in daily_paths + signal_paths):
         raise FileNotFoundError("该因子策略缺少训练期或样本外明细，无法展示完整历史区间")
     daily = pd.concat(
-        [pd.read_csv(path, encoding="utf-8-sig", parse_dates=["date", "signal_date"]) for path in daily_paths],
+        [read_frame(path, parse_dates=["date", "signal_date"]) for path in daily_paths],
         ignore_index=True,
     ).drop_duplicates("date", keep="last").sort_values("date").reset_index(drop=True)
     daily = rebuild_expansion_stitched_cumulatives(daily)
     signals = pd.concat(
-        [pd.read_csv(path, encoding="utf-8-sig", parse_dates=["signal_date"]) for path in signal_paths],
+        [read_frame(path, parse_dates=["signal_date"]) for path in signal_paths],
         ignore_index=True,
     ).drop_duplicates("signal_date", keep="last").sort_values("signal_date").reset_index(drop=True)
     return daily, signals
@@ -3872,8 +4111,8 @@ def _factor_detail_signals(study_dir: Path, stem: str, daily: pd.DataFrame, mode
     """Use stored signal details when available; rolling results retain executed totals."""
     if mode != "滚动样本外":
         path = study_dir / f"{stem}_样本外信号.csv"
-        if path.exists():
-            signals = pd.read_csv(path, encoding="utf-8-sig", parse_dates=["signal_date"])
+        if frame_exists(path):
+            signals = read_frame(path, parse_dates=["signal_date"])
             start, end = daily["date"].min(), daily["date"].max()
             signals = signals.loc[signals["signal_date"].between(start, end)].copy()
             if not signals.empty:
@@ -3966,10 +4205,10 @@ def _render_factor_config_snapshot(payload: dict[str, object], study_dir: Path, 
         _render_theme_table(pd.DataFrame(rows), numeric_columns={"数值"}, scrollable=True)
     if mode == "滚动样本外":
         path = study_dir / "滚动定参" / f"{stem}_逐期定参.csv"
-        if path.exists():
+        if frame_exists(path):
             st.markdown("#### 每段实际使用的参数")
             st.caption("训练起始日至训练截止日只用于重新选参；表中的收益、胜率和回撤均来自紧随其后的样本外区间。")
-            periods = pd.read_csv(path, encoding="utf-8-sig").rename(columns={
+            periods = read_frame(path).rename(columns={
                 "累计资本利得_BP": "下一段样本外累计资本利得_BP",
                 "资本利得超额_BP": "下一段样本外资本利得超额_BP",
                 "资本利得交易胜率": "下一段样本外交易胜率",
@@ -4414,6 +4653,8 @@ def _render_historical_result_page(experiment_id: str) -> None:
         default="样本外" if (is_factor_expansion_archive or is_direct_factor_rolling_archive) else "全区间",
         favorite_experiment=experiment_dir,
     )
+    if is_direct_factor_rolling_archive:
+        _render_factor_rolling_period_switcher(experiment_dir, full_daily, full_signals)
     diagnostics = _build_period_diagnostics(daily, signals)
     _render_workspace(
         daily,
@@ -5402,14 +5643,17 @@ def _render_experiment_history(show_report: bool = False) -> None:
     report_path = Path(selected) / "performance_report.html"
     manifest_path = Path(selected) / "run_manifest.json"
     download_col, manifest_col = st.columns(2)
-    if report_path.exists():
+    try:
+        report_bytes = report_path.read_bytes() if report_path.exists() else build_strategy_html_report(*load_experiment_result(Path(selected))[:4])
         download_col.download_button(
             "下载HTML报告",
-            data=report_path.read_bytes(),
+            data=report_bytes,
             file_name=f"{Path(selected).name}_回测报告.html",
             mime="text/html",
             use_container_width=True,
         )
+    except (OSError, ValueError, TypeError, KeyError, IndexError):
+        download_col.caption("该归档缺少生成 HTML 报告所需的数据")
     if manifest_path.exists():
         manifest_col.download_button(
             "下载运行清单",
@@ -5596,6 +5840,18 @@ def _render_rolling_task_queue() -> None:
     def render_queue_snapshot() -> None:
         """Poll only this small sidebar fragment so form state is untouched."""
         tasks = list_rolling_tasks(ROOT)
+        completion_state = {
+            str(task.get("task_id")): str(task.get("status"))
+            for task in tasks if task.get("task_id")
+        }
+        previous_state = st.session_state.get("rolling_queue_completion_state", {})
+        if isinstance(previous_state, dict):
+            for task_id, status in completion_state.items():
+                if status == "完成" and previous_state.get(task_id) not in {None, "完成"}:
+                    st.toast(f"滚动任务 {task_id} 已完成", icon="✅")
+                elif status == "失败" and previous_state.get(task_id) not in {None, "失败"}:
+                    st.toast(f"滚动任务 {task_id} 执行失败", icon="⚠️")
+        st.session_state["rolling_queue_completion_state"] = completion_state
         by_id = {str(task.get("task_id")): task for task in tasks if task.get("task_id")}
 
         def has_completed_retry(task: dict[str, object]) -> bool:
@@ -5702,6 +5958,7 @@ def _render_rolling_task_queue() -> None:
 
     with st.sidebar:
         st.markdown("#### 滚动任务队列")
+        st.caption("最多并行 2 个；完成或失败会在右上角提示")
         render_queue_snapshot()
 
 

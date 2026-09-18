@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import base64
 import html as html_lib
+import tempfile
 from io import BytesIO
 
 import pandas as pd
@@ -72,15 +73,34 @@ def write_strategy_outputs(
     strategy_metrics: dict[str, object],
     benchmark_metrics: dict[str, object],
     output_dir: Path,
+    *,
+    persist_html_report: bool = True,
+    persist_primary_csv: bool = True,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    _write_signal_score(signals, output_dir / "signal_score.csv")
-    _write_strategy_nav(daily, output_dir / "strategy_nav.csv")
+    if persist_primary_csv:
+        _write_signal_score(signals, output_dir / "signal_score.csv")
+        _write_strategy_nav(daily, output_dir / "strategy_nav.csv")
     diagnostics = _build_period_diagnostics(daily, signals)
     diagnostics.to_csv(output_dir / "period_diagnostics.csv", index=False, encoding="utf-8-sig")
     _write_capital_gain_trades(daily, output_dir / "capital_gain_trades.csv")
     _write_strategy_metrics(strategy_metrics, benchmark_metrics, output_dir / "performance_metrics.csv")
-    _write_strategy_html_report(daily, signals, strategy_metrics, benchmark_metrics, output_dir / "performance_report.html", diagnostics)
+    if persist_html_report:
+        _write_strategy_html_report(daily, signals, strategy_metrics, benchmark_metrics, output_dir / "performance_report.html", diagnostics)
+
+
+def build_strategy_html_report(
+    daily: pd.DataFrame,
+    signals: pd.DataFrame,
+    strategy_metrics: dict[str, object],
+    benchmark_metrics: dict[str, object],
+) -> bytes:
+    """Build a downloadable report from archived numerical results on demand."""
+    diagnostics = _build_period_diagnostics(daily, signals)
+    with tempfile.TemporaryDirectory(prefix="local_bond_report_") as temporary_dir:
+        path = Path(temporary_dir) / "performance_report.html"
+        _write_strategy_html_report(daily, signals, strategy_metrics, benchmark_metrics, path, diagnostics)
+        return path.read_bytes()
 
 
 def _write_nav(frame: pd.DataFrame, path: Path) -> None:

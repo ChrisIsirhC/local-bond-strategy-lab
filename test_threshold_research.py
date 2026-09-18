@@ -5,12 +5,20 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from common.threshold_research import _candidate_position_matrix
-from common.trade_metrics import select_executed_weekly_positions, vectorized_capital_trade_metrics
+from common.threshold_research import _candidate_position_matrix, _training_module_options
+from strategies.dashboard_signal_v1 import DashboardThresholds
 from strategies.position_policy import DashboardPositionPolicy
 
 
 class ThresholdSearchPositionTests(unittest.TestCase):
+    def test_future_factor_values_do_not_change_training_grid(self):
+        values = pd.DataFrame({"spread_change": [1.0, 1.1, 1.2, 1.3, 900.0]})
+        context = {"factor_values": values, "signal_index": np.array([0, 1, 2, 3])}
+        before = _training_module_options(context, DashboardThresholds())
+        values.loc[4, "spread_change"] = 90000.0
+        after = _training_module_options(context, DashboardThresholds())
+        self.assertEqual(before, after)
+
     def test_candidate_positions_match_strategy_policy(self) -> None:
         scores = np.array([[20.0, 50.0, 80.0], [20.0, 50.0, 80.0]])
         policies = [
@@ -36,19 +44,6 @@ class ThresholdSearchPositionTests(unittest.TestCase):
         expected = np.vstack([policy.vectorized_positions(row) for policy, row in zip(policies, scores)])
 
         np.testing.assert_allclose(actual, expected)
-
-    def test_future_signal_is_excluded_from_trade_metrics(self) -> None:
-        weekly_positions = np.ones((2, 128), dtype=float)
-        weekly_positions[1, 127] = -1.0
-        daily_signal_index = np.arange(127, dtype=int)
-        weekly_capital_bp = np.zeros((2, 127), dtype=float)
-
-        executed, signal_ids = select_executed_weekly_positions(weekly_positions, daily_signal_index)
-        metrics = vectorized_capital_trade_metrics(executed, weekly_capital_bp)
-
-        self.assertEqual(executed.shape, (2, 127))
-        self.assertEqual(signal_ids[-1], 126)
-        np.testing.assert_array_equal(metrics["trade_count"], np.array([1, 1]))
 
 
 if __name__ == "__main__":

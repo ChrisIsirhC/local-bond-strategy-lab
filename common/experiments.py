@@ -3,13 +3,22 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from copy import deepcopy
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
 from common.archive_ids import archive_id_category, existing_short_archive_id, short_archive_id
+from common.strategy_repository import register_strategy_archive
+from common.result_store import (
+    read_archive_frame,
+    write_result_frame,
+    migrate_rolling_periods,
+    write_rolling_reproduction_bundle,
+)
 from common.config import DashboardStrategyConfig, load_strategy_config, save_strategy_config
 from common.provenance import record_step
 from common.market_data import CONDITIONAL_BENCHMARK_ID, CONDITIONAL_BENCHMARK_NAME, GOV_10Y, TRADED_ASSET_ID, benchmark_label, curve_path
@@ -24,6 +33,21 @@ EXPERIMENT_DIR = Path("backtest_outputs") / "experiments"
 EXPERIMENT_INDEX_FILE = Path("backtest_outputs") / "experiments_index.json"
 _EXPERIMENTS_CACHE: dict[str, tuple[tuple[tuple[str, int, int], ...], pd.DataFrame]] = {}
 _EXPERIMENT_INDEX_VERSION = 6
+
+
+def _derived_signal_period_metrics(daily: pd.DataFrame, return_column: str) -> dict[str, object]:
+    """Rebuild display metrics from the centrally stored execution path."""
+    if "signal_date" not in daily or return_column not in daily:
+        return {"signal_period_count": 0, "winning_signal_periods": 0, "signal_period_win_rate": None, "avg_signal_period_return": None}
+    values = daily.groupby("signal_date")[return_column].apply(
+        lambda series: (1.0 + pd.to_numeric(series, errors="coerce").fillna(0.0)).prod() - 1.0
+    ).dropna()
+    return {
+        "signal_period_count": int(len(values)),
+        "winning_signal_periods": int((values > 0).sum()),
+        "signal_period_win_rate": float((values > 0).mean()) if len(values) else None,
+        "avg_signal_period_return": float(values.mean()) if len(values) else None,
+    }
 
 
 def archive_id_prefix(source: str, config: DashboardStrategyConfig | None = None) -> str:
@@ -100,13 +124,20 @@ def archive_dashboard_experiment(
 ) -> Path:
     run_time = datetime.now()
     research_metadata = _enrich_research_metadata(config, research_metadata)
-    run_id = f"{run_time:%Y%m%d_%H%M%S_%f}__{_safe_name(config.name)}"
-    output_dir = _next_available_dir(root / EXPERIMENT_DIR / run_id)
+    archive_name = f"{run_time:%Y%m%d_%H%M%S_%f}__{_safe_name(config.name)}"
+    output_dir = _next_available_dir(root / EXPERIMENT_DIR / archive_name)
     output_dir.mkdir(parents=True, exist_ok=False)
     prefix = archive_id_prefix(source, config)
     display_id = short_archive_id(root, archive_id_category(prefix), output_dir.name, prefix)
 
-    write_strategy_outputs(daily, signals, strategy_metrics, benchmark_metrics, output_dir)
+    # Historical result pages are data-driven.  The HTML export is a
+    # regenerable download, so do not duplicate chart payloads in every
+    # immutable archive.
+    write_strategy_outputs(
+        daily, signals, strategy_metrics, benchmark_metrics, output_dir,
+        persist_html_report=False,
+        persist_primary_csv=False,
+    )
     config = record_step(
         config, config, root, "最终回测", output_path=output_dir / "config.json",
         entrypoint="common.runner.run_dashboard_config",
@@ -125,7 +156,9 @@ def archive_dashboard_experiment(
     training_end = research_metadata.get("训练截止日")
     out_of_sample_metrics = _archived_out_of_sample_metrics(output_dir, training_end)
     manifest = {
-        "run_id": output_dir.name,
+        # The timestamped folder is storage addressing only.  ``short_id`` is
+        # the immutable and globally unique strategy identity shown to users.
+        "archive_key": output_dir.name,
         "short_id": display_id,
         "short_id_prefix": prefix,
         "策略名称": config.name,
@@ -181,15 +214,39 @@ def archive_dashboard_experiment(
             "performance_metrics.csv",
             "period_diagnostics.csv",
             "capital_gain_trades.csv",
-            "signal_score.csv",
-            "strategy_nav.csv",
-            "performance_report.html",
+            "result_store/<策略ID>/signal_score.parquet",
+            "result_store/<策略ID>/strategy_nav.parquet",
         ],
     }
     (output_dir / "run_manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2, default=_json_default) + "\n",
         encoding="utf-8",
     )
+    register_strategy_archive(
+        root,
+        strategy_id=display_id,
+        archive_dir=output_dir,
+        manifest=manifest,
+        config_payload=config.as_dict(),
+        strategy_metrics=strategy_metrics,
+    )
+    # Keep the numerical evidence exactly once in the central columnar store.
+    # Archive-local CSV remains a temporary read fallback for old strategies.
+    write_result_frame(root, display_id, "strategy_nav", daily)
+    write_result_frame(root, display_id, "signal_score", signals)
+    rolling_dir = research_metadata.get("滚动结果目录") if isinstance(research_metadata, dict) else None
+    if rolling_dir:
+        source_rolling_dir = root / str(rolling_dir)
+        migrate_rolling_periods(root, display_id, source_rolling_dir / "逐期定参与样本外表现.csv")
+        # The rolling workspace is not an archive dependency.  Retain the
+        # exact settings and each selected period parameter under the strategy
+        # ID so reruns still reuse the original windows after workspaces move.
+        write_rolling_reproduction_bundle(
+            root,
+            display_id,
+            rolling_dir=source_rolling_dir,
+            archive_config_path=output_dir / "config.json",
+        )
     _append_experiment_index(root, output_dir, manifest, strategy_metrics)
     return output_dir
 
@@ -478,11 +535,38 @@ def _append_experiment_index(
     _EXPERIMENTS_CACHE.pop(str(root.resolve()), None)
 
 
-def load_experiment_result(
-    experiment_dir: Path,
+def _result_load_signature(experiment_dir: Path) -> tuple[tuple[str, int, int], ...]:
+    """Cheap cache key that changes whenever any displayed result evidence changes."""
+    experiment_dir = Path(experiment_dir).resolve()
+    root = experiment_dir.parent.parent.parent
+    strategy_id = existing_short_archive_id(root, "", experiment_dir.name)
+    paths = [
+        experiment_dir / "config.json",
+        experiment_dir / "performance_metrics.csv",
+        experiment_dir / "run_manifest.json",
+    ]
+    if strategy_id:
+        paths.extend([
+            root / "backtest_outputs" / "result_store" / strategy_id / "strategy_nav.parquet",
+            root / "backtest_outputs" / "result_store" / strategy_id / "signal_score.parquet",
+        ])
+    else:
+        paths.extend([experiment_dir / "strategy_nav.csv", experiment_dir / "signal_score.csv"])
+    return tuple(
+        (str(path), int(path.stat().st_mtime_ns), int(path.stat().st_size))
+        for path in paths if path.exists()
+    )
+
+
+@lru_cache(maxsize=48)
+def _load_experiment_result_cached(
+    experiment_dir_text: str,
+    _signature: tuple[tuple[str, int, int], ...],
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, object], dict[str, object], DashboardStrategyConfig]:
+    """Disk-heavy immutable archive load; caller receives defensive copies."""
+    experiment_dir = Path(experiment_dir_text)
     config = load_strategy_config(experiment_dir / "config.json")
-    nav = pd.read_csv(experiment_dir / "strategy_nav.csv", encoding="utf-8-sig")
+    nav = read_archive_frame(experiment_dir, "strategy_nav")
     mapping = {
         "日期": "date", "信号日期": "signal_date", "目标仓位": "目标仓位", "止盈止损事件": "止盈止损事件",
         "条件基准仓位": "comparison_position", "交易标的到期收益率_百分比": "asset_yield_pct", "比较基准到期收益率_百分比": "yield_pct",
@@ -512,7 +596,7 @@ def load_experiment_result(
     if "capital_excess_cum" not in daily:
         daily["capital_excess_cum"] = pd.to_numeric(daily["capital_excess_return"], errors="coerce").fillna(0.0).cumsum()
 
-    signals = pd.read_csv(experiment_dir / "signal_score.csv", encoding="utf-8-sig")
+    signals = read_archive_frame(experiment_dir, "signal_score")
     signals["signal_date"] = pd.to_datetime(signals["signal_date"])
     signals.attrs["position_policy"] = config.positions.as_dict()
     provenance = config.research_provenance or {}
@@ -524,9 +608,18 @@ def load_experiment_result(
     signals.attrs["thresholds"] = config.thresholds.as_dict()
     signals.attrs["signal_frequency"] = config.signal_frequency
 
-    metrics_frame = pd.read_csv(experiment_dir / "performance_metrics.csv", encoding="utf-8-sig")
-    strategy_metrics = _metrics_from_archive(metrics_frame, "策略")
-    benchmark_metrics = _metrics_from_archive(metrics_frame, "基准")
+    metrics_path = experiment_dir / "performance_metrics.csv"
+    if metrics_path.exists():
+        metrics_frame = pd.read_csv(metrics_path, encoding="utf-8-sig")
+        strategy_metrics = _metrics_from_archive(metrics_frame, "策略")
+        benchmark_metrics = _metrics_from_archive(metrics_frame, "基准")
+    else:
+        # These are derived presentation artifacts.  The immutable Parquet NAV
+        # and signal tables are the single source of truth after migration.
+        strategy_metrics = performance_metrics(daily, return_col="strategy_return", nav_col="strategy_nav")
+        benchmark_metrics = performance_metrics(daily, return_col="total_return", nav_col="benchmark_nav_rebased")
+        strategy_metrics.update(_derived_signal_period_metrics(daily, "strategy_return"))
+        benchmark_metrics.update(_derived_signal_period_metrics(daily, "total_return"))
     manifest_path = experiment_dir / "run_manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
     benchmark_metrics["benchmark_id"] = manifest.get("基准ID", config.benchmark_id)
@@ -545,12 +638,32 @@ def load_experiment_result(
     return daily, signals, strategy_metrics, benchmark_metrics, config
 
 
+def load_experiment_result(
+    experiment_dir: Path,
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, object], dict[str, object], DashboardStrategyConfig]:
+    """Load an immutable archived result once per file version for Streamlit reruns.
+
+    Streamlit reruns the page on every control interaction.  Returning copies
+    keeps renderer-side date conversions and temporary columns from polluting
+    the process cache while avoiding repeated Parquet decoding and trade-metric
+    reconstruction for unchanged archives.
+    """
+    directory = Path(experiment_dir).resolve()
+    daily, signals, strategy, benchmark, config = _load_experiment_result_cached(
+        str(directory), _result_load_signature(directory)
+    )
+    return (
+        daily.copy(deep=True),
+        signals.copy(deep=True),
+        deepcopy(strategy),
+        deepcopy(benchmark),
+        deepcopy(config),
+    )
+
+
 def _archived_strategy_trade_metrics(experiment_dir: Path) -> dict[str, object]:
-    nav_path = experiment_dir / "strategy_nav.csv"
-    if not nav_path.exists():
-        return {}
     try:
-        frame = pd.read_csv(nav_path, encoding="utf-8-sig")
+        frame = read_archive_frame(experiment_dir, "strategy_nav")
         frame = frame.rename(
             columns={
                 "日期": "date",
@@ -598,7 +711,7 @@ def _archived_out_of_sample_metrics(experiment_dir: Path, training_end: object) 
         cutoff = pd.Timestamp(training_end)
         if pd.isna(cutoff):
             return {}
-        nav = pd.read_csv(experiment_dir / "strategy_nav.csv", encoding="utf-8-sig")
+        nav = read_archive_frame(experiment_dir, "strategy_nav")
         nav = nav.rename(columns={
             "日期": "date", "策略日收益率": "strategy_return", "策略资本利得收益": "strategy_capital_return",
             "策略资本利得_BP": "strategy_capital_bp", "策略净值": "strategy_nav", "仓位": "仓位",
