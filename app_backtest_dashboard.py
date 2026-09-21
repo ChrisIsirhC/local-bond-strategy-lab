@@ -145,7 +145,7 @@ def _strategy_config_label(path: Path, *, favorites: set[str] | None = None) -> 
     config = load_strategy_config(path)
     marker = "\u00a0\u00a0\u00a0"
     if _is_archived_experiment_config(path):
-        is_favorite = path.parent.name in (favorites or set())
+        is_favorite = path.parent.name.casefold() in (favorites or set())
         marker = "__local_bond_favorite__" if is_favorite else marker
         label = _run_display_name(path.parent, config.name)
     elif path.parent.name == "experiments":
@@ -216,6 +216,11 @@ def _strategy_config_picker(
     return selected
 
 
+def _archive_directory_name(value: str | Path) -> str:
+    """Get an archive's leaf directory across Windows-written indexes and Linux."""
+    return Path(str(value).replace("\\", "/")).name
+
+
 def _favorite_experiment_ids() -> set[str]:
     """Read the user's local, display-only experiment collection."""
     path = ROOT / FAVORITES_FILE
@@ -226,12 +231,12 @@ def _favorite_experiment_ids() -> set[str]:
     entries = payload.get("experiments", []) if isinstance(payload, dict) else []
     if not isinstance(entries, list):
         return set()
-    return {Path(str(entry)).name for entry in entries if str(entry).strip()}
+    return {_archive_directory_name(entry).casefold() for entry in entries if str(entry).strip()}
 
 
 def _set_experiment_favorite(experiment_dir: Path, favorite: bool) -> None:
     """Persist a favorite by immutable archive directory name, never by title."""
-    archive_name = Path(experiment_dir).name
+    archive_name = _archive_directory_name(experiment_dir).casefold()
     if not archive_name:
         return
     favorites = _favorite_experiment_ids()
@@ -274,7 +279,7 @@ def _normalise_display_name(value: object) -> str:
 
 def _set_experiment_display_name(experiment_dir: Path, title: object, original_name: object) -> None:
     """Persist a reversible display alias keyed by immutable archive directory."""
-    archive_name = Path(experiment_dir).name
+    archive_name = _archive_directory_name(experiment_dir)
     if not archive_name:
         return
     names = _experiment_display_names()
@@ -544,7 +549,7 @@ def _render_favorite_button(experiment_dir: Path, *, key: str, container: object
     # workspace therefore remain in place instead of visibly rebuilding.
     @st.fragment
     def render_control() -> None:
-        is_favorite = archive_name in _favorite_experiment_ids()
+        is_favorite = archive_name.casefold() in _favorite_experiment_ids()
         state_key = f"{key}_bookmark"
         safe_key = re.sub(r"[^a-zA-Z0-9_-]+", "_", key)
         state_class = "saved" if is_favorite else "empty"
@@ -5539,13 +5544,13 @@ def _render_experiment_history(show_report: bool = False) -> None:
     # the table component.
     favorite_target = str(st.query_params.get("favorite", "")).strip()
     if favorite_target:
-        target_dir = ROOT / "backtest_outputs" / "experiments" / Path(favorite_target).name
+        target_dir = ROOT / "backtest_outputs" / "experiments" / _archive_directory_name(favorite_target)
         if (target_dir / "run_manifest.json").exists():
             requested_state = str(st.query_params.get("favorite_set", "")).strip().lower()
             if requested_state in {"saved", "empty"}:
                 _set_experiment_favorite(target_dir, requested_state == "saved")
             else:
-                _set_experiment_favorite(target_dir, target_dir.name not in _favorite_experiment_ids())
+                _set_experiment_favorite(target_dir, _archive_directory_name(target_dir).casefold() not in _favorite_experiment_ids())
         st.query_params.pop("favorite", None)
         st.query_params.pop("favorite_state", None)
         st.query_params.pop("favorite_current", None)
@@ -5568,12 +5573,12 @@ def _render_experiment_history(show_report: bool = False) -> None:
         for path, name in zip(table_source["实验目录"], table_source["策略名称"])
     ]
     table_source["备注"] = [
-        notes.get(Path(str(path)).name, "")
+        notes.get(_archive_directory_name(path), "")
         for path in table_source["实验目录"]
     ]
     if only_favorites:
         table_source = table_source.loc[
-            table_source["实验目录"].map(lambda value: Path(str(value)).name in favorites)
+            table_source["实验目录"].map(lambda value: _archive_directory_name(value).casefold() in favorites)
         ].copy()
         if table_source.empty:
             st.caption("暂无收藏记录。可在任一结果页点击书签图标。")
@@ -5599,15 +5604,15 @@ def _render_experiment_history(show_report: bool = False) -> None:
     display.insert(
         0,
         "打开结果",
-        [f"/history?experiment={quote(Path(str(path)).name)}" for path in display["实验目录"]],
+        [f"/history?experiment={quote(_archive_directory_name(path))}" for path in display["实验目录"]],
     )
     display.insert(
         1,
         "收藏",
         [
-            f"/history?favorite={quote(Path(str(path)).name)}"
-            f"&favorite_current={'saved' if Path(str(path)).name in favorites else 'empty'}"
-            f"&favorite_set={'empty' if Path(str(path)).name in favorites else 'saved'}"
+            f"/history?favorite={quote(_archive_directory_name(path))}"
+            f"&favorite_current={'saved' if _archive_directory_name(path).casefold() in favorites else 'empty'}"
+            f"&favorite_set={'empty' if _archive_directory_name(path).casefold() in favorites else 'saved'}"
             for path in display["实验目录"]
         ],
     )
