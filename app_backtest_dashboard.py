@@ -34,7 +34,7 @@ from common.result_store import (
     read_rolling_reproduction_manifest,
     write_rolling_reproduction_bundle,
 )
-from common.strategy_repository import strategy_id_for_archive
+from common.strategy_repository import archive_name_for_strategy_id, strategy_id_for_archive
 from common.provenance import (
     MISSING_PROVENANCE,
     UNKNOWN_HISTORY,
@@ -145,7 +145,7 @@ def _strategy_config_label(path: Path, *, favorites: set[str] | None = None) -> 
     config = load_strategy_config(path)
     marker = "\u00a0\u00a0\u00a0"
     if _is_archived_experiment_config(path):
-        is_favorite = path.parent.name in (favorites or set())
+        is_favorite = _archive_presentation_key(path.parent) in (favorites or set())
         marker = "__local_bond_favorite__" if is_favorite else marker
         label = _run_display_name(path.parent, config.name)
     elif path.parent.name == "experiments":
@@ -217,7 +217,7 @@ def _strategy_config_picker(
 
 
 def _favorite_experiment_ids() -> set[str]:
-    """Read the user's local, display-only experiment collection."""
+    """Read favorite identities while retaining long archive names on disk."""
     path = ROOT / FAVORITES_FILE
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -226,7 +226,7 @@ def _favorite_experiment_ids() -> set[str]:
     entries = payload.get("experiments", []) if isinstance(payload, dict) else []
     if not isinstance(entries, list):
         return set()
-    return {_portable_archive_name(entry) for entry in entries if str(entry).strip()}
+    return {_archive_presentation_key(entry) for entry in entries if str(entry).strip()}
 
 
 def _portable_archive_name(value: object) -> str:
@@ -250,20 +250,32 @@ def _archive_presentation_key(experiment_dir: Path | str | object) -> str:
 
 
 def _set_experiment_favorite(experiment_dir: Path, favorite: bool) -> None:
-    """Persist a favorite by immutable archive directory name, never by title."""
+    """Persist favorites by canonical long archive name, never by title.
+
+    The public package opens ``experiments/<strategy_id>`` while the local
+    workstation keeps ``experiments/<timestamped archive_name>``.  Comparing
+    their resolved immutable IDs makes both views show the same bookmark;
+    writing the long name retains the second half of the cross-machine key.
+    """
     archive_name = _portable_archive_name(experiment_dir)
     if not archive_name:
         return
-    favorites = _favorite_experiment_ids()
-    if favorite:
-        favorites.add(archive_name)
-    else:
-        favorites.discard(archive_name)
+    presentation_key = _archive_presentation_key(archive_name)
     path = ROOT / FAVORITES_FILE
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        payload = {}
+    entries = payload.get("experiments", []) if isinstance(payload, dict) else []
+    existing = [str(entry) for entry in entries if str(entry).strip()]
+    favorites = [entry for entry in existing if _archive_presentation_key(entry) != presentation_key]
+    if favorite:
+        canonical_archive_name = archive_name_for_strategy_id(ROOT, presentation_key) or archive_name
+        favorites.append(canonical_archive_name)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp")
     temporary.write_text(
-        json.dumps({"experiments": sorted(favorites)}, ensure_ascii=False, indent=2) + "\n",
+        json.dumps({"experiments": sorted(set(favorites))}, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
     temporary.replace(path)
@@ -575,7 +587,7 @@ def _render_favorite_button(experiment_dir: Path, *, key: str, container: object
     # workspace therefore remain in place instead of visibly rebuilding.
     @st.fragment
     def render_control() -> None:
-        is_favorite = archive_name in _favorite_experiment_ids()
+        is_favorite = _archive_presentation_key(archive_name) in _favorite_experiment_ids()
         state_key = f"{key}_bookmark"
         safe_key = re.sub(r"[^a-zA-Z0-9_-]+", "_", key)
         state_class = "saved" if is_favorite else "empty"
@@ -5608,7 +5620,7 @@ def _render_experiment_history(show_report: bool = False) -> None:
             if requested_state in {"saved", "empty"}:
                 _set_experiment_favorite(target_dir, requested_state == "saved")
             else:
-                _set_experiment_favorite(target_dir, target_dir.name not in _favorite_experiment_ids())
+                _set_experiment_favorite(target_dir, _archive_presentation_key(target_dir) not in _favorite_experiment_ids())
         st.query_params.pop("favorite", None)
         st.query_params.pop("favorite_state", None)
         st.query_params.pop("favorite_current", None)
@@ -5636,7 +5648,7 @@ def _render_experiment_history(show_report: bool = False) -> None:
     ]
     if only_favorites:
         table_source = table_source.loc[
-            table_source["实验目录"].map(lambda value: Path(str(value)).name in favorites)
+            table_source["实验目录"].map(lambda value: _archive_presentation_key(value) in favorites)
         ].copy()
         if table_source.empty:
             st.caption("暂无收藏记录。可在任一结果页点击书签图标。")
@@ -5669,8 +5681,8 @@ def _render_experiment_history(show_report: bool = False) -> None:
         "收藏",
         [
             f"/history?favorite={quote(Path(str(path)).name)}"
-            f"&favorite_current={'saved' if Path(str(path)).name in favorites else 'empty'}"
-            f"&favorite_set={'empty' if Path(str(path)).name in favorites else 'saved'}"
+            f"&favorite_current={'saved' if _archive_presentation_key(path) in favorites else 'empty'}"
+            f"&favorite_set={'empty' if _archive_presentation_key(path) in favorites else 'saved'}"
             for path in display["实验目录"]
         ],
     )

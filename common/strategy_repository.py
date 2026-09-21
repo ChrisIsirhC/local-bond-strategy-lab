@@ -326,6 +326,27 @@ def strategy_id_for_archive(root: Path, archive_name: str) -> str | None:
     return _strategy_id_lookup(str(Path(root).resolve()), str(archive_name))
 
 
+@lru_cache(maxsize=4096)
+def _archive_name_by_identifier_lookup(root_text: str, strategy_id: str) -> str | None:
+    """Return the canonical timestamped archive for a known immutable ID."""
+    try:
+        with _connection(Path(root_text)) as connection:
+            row = connection.execute(
+                "SELECT archive_name FROM strategy_identity WHERE strategy_id = ?", (strategy_id,)
+            ).fetchone()
+            return str(row["archive_name"]) if row is not None else None
+    except (sqlite3.Error, ValueError):
+        return None
+
+
+def archive_name_for_strategy_id(root: Path, strategy_id: str) -> str | None:
+    """Read-only reverse mapping used when public folders use a compact ID."""
+    normalized = str(strategy_id).upper().strip()
+    if not _IDENTIFIER_RE.fullmatch(normalized):
+        return None
+    return _archive_name_by_identifier_lookup(str(Path(root).resolve()), normalized)
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
