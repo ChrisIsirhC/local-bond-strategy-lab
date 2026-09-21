@@ -273,7 +273,6 @@ def _build_period_diagnostics(daily: pd.DataFrame, signals: pd.DataFrame) -> pd.
         raise ValueError("无法生成周期诊断：没有可用策略信号")
     signal_base["下一信号日期"] = signal_base["signal_date"].shift(-1)
     factor_cols = [c for c in signal_base.columns if c.endswith("_定性") or c.endswith("_得分")]
-    signal_lookup = signal_base.set_index("signal_date")
 
     rows: list[dict[str, object]] = []
     for signal_date, group in daily.groupby("signal_date", sort=True):
@@ -291,12 +290,18 @@ def _build_period_diagnostics(daily: pd.DataFrame, signals: pd.DataFrame) -> pd.
         # as a newly generated signal.  Use the latest actual signal at or
         # before the execution boundary instead of assuming an exact index
         # match (which formerly raised KeyError for e.g. 2026-09-18).
-        eligible_signal_dates = signal_lookup.index[signal_lookup.index <= signal_date]
-        if len(eligible_signal_dates) == 0:
+        eligible_signals = signal_base.loc[signal_base["signal_date"] <= signal_date]
+        if eligible_signals.empty:
             # A malformed result should be explicit rather than silently
             # borrowing a future signal and introducing look-ahead bias.
             raise ValueError(f"周期诊断缺少 {signal_date:%Y-%m-%d} 当日或此前的策略信号")
-        signal_row = signal_lookup.loc[eligible_signal_dates[-1]]
+        # Keep this positional rather than indexing the timestamp again.
+        # ``daily.signal_date`` can originate from a platform-normalized
+        # calendar while persisted signals may carry a subtly different
+        # datetime representation.  We have already chosen the latest valid
+        # row by value; a second exact DatetimeIndex lookup can fail on
+        # Streamlit Cloud even though that row exists.
+        signal_row = eligible_signals.iloc[-1]
         row = {
             "信号日期": pd.to_datetime(signal_date).strftime("%Y-%m-%d"),
             "下一信号日期": pd.to_datetime(signal_row["下一信号日期"]).strftime("%Y-%m-%d")
