@@ -217,7 +217,14 @@ def _strategy_config_picker(
 
 
 def _favorite_experiment_ids() -> set[str]:
-    """Read favorite identities while retaining long archive names on disk."""
+    """Read favorite IDs while retaining long archive names on disk.
+
+    The deployed archive index deliberately carries both ``运行ID`` and the
+    canonical timestamped ``archive_name``.  Resolve through that published
+    table first so bookmarks do not disappear if SQLite metadata is rebuilt
+    or unavailable on Streamlit Cloud; SQLite remains a fallback for local
+    archives not yet present in the public index.
+    """
     path = ROOT / FAVORITES_FILE
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -226,7 +233,29 @@ def _favorite_experiment_ids() -> set[str]:
     entries = payload.get("experiments", []) if isinstance(payload, dict) else []
     if not isinstance(entries, list):
         return set()
-    return {_archive_presentation_key(entry) for entry in entries if str(entry).strip()}
+    saved_names = {_portable_archive_name(entry) for entry in entries if str(entry).strip()}
+    if not saved_names:
+        return set()
+    resolved: set[str] = set()
+    try:
+        index_payload = json.loads((ROOT / "backtest_outputs" / "experiments_index.json").read_text(encoding="utf-8"))
+        index_rows = index_payload.get("rows", []) if isinstance(index_payload, dict) else []
+    except (OSError, json.JSONDecodeError):
+        index_rows = []
+    indexed_names: set[str] = set()
+    for row in index_rows:
+        if not isinstance(row, dict):
+            continue
+        archive_name = _portable_archive_name(row.get("archive_name") or row.get("archive_key"))
+        strategy_id = str(row.get("运行ID", "")).upper().strip()
+        if archive_name in saved_names and strategy_id:
+            resolved.add(strategy_id)
+            indexed_names.add(archive_name)
+    # Keep working with unindexed local archives rather than dropping their
+    # bookmarks during the next history-index refresh.
+    for archive_name in saved_names - indexed_names:
+        resolved.add(_archive_presentation_key(archive_name))
+    return {item for item in resolved if item}
 
 
 def _portable_archive_name(value: object) -> str:
