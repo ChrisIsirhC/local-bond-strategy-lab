@@ -290,7 +290,11 @@ def _build_period_diagnostics(daily: pd.DataFrame, signals: pd.DataFrame) -> pd.
         # as a newly generated signal.  Use the latest actual signal at or
         # before the execution boundary instead of assuming an exact index
         # match (which formerly raised KeyError for e.g. 2026-09-18).
-        eligible_signals = signal_base.loc[signal_base["signal_date"] <= signal_date]
+        # Do not use ``.loc`` here.  Cloud deployments can deserialize the
+        # archived datetime index with a different resolution; plain boolean
+        # filtering keeps the selected signal as a row and never asks pandas
+        # to resolve a timestamp as an exact index label.
+        eligible_signals = signal_base[signal_base["signal_date"].le(signal_date)]
         if eligible_signals.empty:
             # A malformed result should be explicit rather than silently
             # borrowing a future signal and introducing look-ahead bias.
