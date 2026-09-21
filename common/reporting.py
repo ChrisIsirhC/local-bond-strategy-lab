@@ -261,13 +261,23 @@ def _classify_period(position: float, strategy_return: float, benchmark_return: 
 
 
 def _build_period_diagnostics(daily: pd.DataFrame, signals: pd.DataFrame) -> pd.DataFrame:
-    signal_base = signals.copy().sort_values("signal_date").reset_index(drop=True)
+    signal_base = signals.copy()
+    signal_base["signal_date"] = pd.to_datetime(signal_base["signal_date"], errors="coerce").dt.normalize()
+    signal_base = (
+        signal_base.dropna(subset=["signal_date"])
+        .sort_values("signal_date")
+        .drop_duplicates("signal_date", keep="last")
+        .reset_index(drop=True)
+    )
+    if signal_base.empty:
+        raise ValueError("无法生成周期诊断：没有可用策略信号")
     signal_base["下一信号日期"] = signal_base["signal_date"].shift(-1)
     factor_cols = [c for c in signal_base.columns if c.endswith("_定性") or c.endswith("_得分")]
     signal_lookup = signal_base.set_index("signal_date")
 
     rows: list[dict[str, object]] = []
     for signal_date, group in daily.groupby("signal_date", sort=True):
+        signal_date = pd.Timestamp(signal_date).normalize()
         strategy_return = (1.0 + pd.to_numeric(group["strategy_return"], errors="coerce").fillna(0.0)).prod() - 1.0
         benchmark_return = (1.0 + pd.to_numeric(group["total_return"], errors="coerce").fillna(0.0)).prod() - 1.0
         excess_return = strategy_return - benchmark_return
@@ -275,7 +285,18 @@ def _build_period_diagnostics(daily: pd.DataFrame, signals: pd.DataFrame) -> pd.
         benchmark_capital_bp = pd.to_numeric(group["benchmark_capital_bp"], errors="coerce").fillna(0.0).sum()
         capital_excess_bp = strategy_capital_bp - benchmark_capital_bp
         position = float(group["仓位"].iloc[0])
-        signal_row = signal_lookup.loc[signal_date]
+        # The rolling executor may add a final, synthetic execution boundary
+        # at the last market day so the previous weekly signal covers the
+        # remaining trading days.  That date is intentionally not persisted
+        # as a newly generated signal.  Use the latest actual signal at or
+        # before the execution boundary instead of assuming an exact index
+        # match (which formerly raised KeyError for e.g. 2026-09-18).
+        eligible_signal_dates = signal_lookup.index[signal_lookup.index <= signal_date]
+        if len(eligible_signal_dates) == 0:
+            # A malformed result should be explicit rather than silently
+            # borrowing a future signal and introducing look-ahead bias.
+            raise ValueError(f"周期诊断缺少 {signal_date:%Y-%m-%d} 当日或此前的策略信号")
+        signal_row = signal_lookup.loc[eligible_signal_dates[-1]]
         row = {
             "信号日期": pd.to_datetime(signal_date).strftime("%Y-%m-%d"),
             "下一信号日期": pd.to_datetime(signal_row["下一信号日期"]).strftime("%Y-%m-%d")

@@ -303,7 +303,7 @@ def _strategy_id_lookup(root_text: str, archive_name: str) -> str | None:
 
 @lru_cache(maxsize=4096)
 def _strategy_id_by_identifier_lookup(root_text: str, strategy_id: str) -> str | None:
-    """Cache public short-ID validation on repeated result-table renders."""
+    """Read a known ID without turning every public-page cell into a DB open."""
     try:
         with _connection(Path(root_text)) as connection:
             row = connection.execute(

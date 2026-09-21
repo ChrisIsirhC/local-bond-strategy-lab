@@ -145,7 +145,7 @@ def _strategy_config_label(path: Path, *, favorites: set[str] | None = None) -> 
     config = load_strategy_config(path)
     marker = "\u00a0\u00a0\u00a0"
     if _is_archived_experiment_config(path):
-        is_favorite = path.parent.name.casefold() in (favorites or set())
+        is_favorite = path.parent.name in (favorites or set())
         marker = "__local_bond_favorite__" if is_favorite else marker
         label = _run_display_name(path.parent, config.name)
     elif path.parent.name == "experiments":
@@ -216,25 +216,6 @@ def _strategy_config_picker(
     return selected
 
 
-def _archive_directory_name(value: str | Path) -> str:
-    """Get an archive's leaf directory across Windows-written indexes and Linux."""
-    return Path(str(value).replace("\\", "/")).name
-
-
-def _archive_presentation_key(experiment_dir: str | Path) -> str:
-    """Use the immutable strategy ID for all user-entered presentation data.
-
-    The published archive folders are compact IDs while the original local
-    name/remark files were keyed by long Windows directory names.  Resolving
-    the legacy key through the strategy registry preserves those values across
-    both directory layouts without altering frozen experiment data.
-    """
-    archive_name = _archive_directory_name(experiment_dir)
-    if not archive_name:
-        return ""
-    return strategy_id_for_archive(ROOT, archive_name) or archive_name
-
-
 def _favorite_experiment_ids() -> set[str]:
     """Read the user's local, display-only experiment collection."""
     path = ROOT / FAVORITES_FILE
@@ -245,12 +226,32 @@ def _favorite_experiment_ids() -> set[str]:
     entries = payload.get("experiments", []) if isinstance(payload, dict) else []
     if not isinstance(entries, list):
         return set()
-    return {_archive_directory_name(entry).casefold() for entry in entries if str(entry).strip()}
+    return {_portable_archive_name(entry) for entry in entries if str(entry).strip()}
+
+
+def _portable_archive_name(value: object) -> str:
+    """Return an archive basename from either Windows or POSIX metadata.
+
+    The local archive index was created on Windows, while the public package
+    uses short strategy-ID directories on Linux.  ``pathlib.Path`` only
+    understands the host platform's separator, so a legacy Windows path must
+    be normalized explicitly before it can be used as an identity lookup.
+    """
+    text = str(value or "").strip().replace("\\", "/").rstrip("/")
+    return text.rsplit("/", 1)[-1] if text else ""
+
+
+def _archive_presentation_key(experiment_dir: Path | str | object) -> str:
+    """Resolve a presentation record to immutable strategy ID when known."""
+    archive_name = _portable_archive_name(experiment_dir)
+    if not archive_name:
+        return ""
+    return strategy_id_for_archive(ROOT, archive_name) or archive_name
 
 
 def _set_experiment_favorite(experiment_dir: Path, favorite: bool) -> None:
     """Persist a favorite by immutable archive directory name, never by title."""
-    archive_name = _archive_directory_name(experiment_dir).casefold()
+    archive_name = _portable_archive_name(experiment_dir)
     if not archive_name:
         return
     favorites = _favorite_experiment_ids()
@@ -269,7 +270,13 @@ def _set_experiment_favorite(experiment_dir: Path, favorite: bool) -> None:
 
 
 def _experiment_display_names() -> dict[str, str]:
-    """Load aliases by immutable ID and translate legacy directory keys."""
+    """Load aliases keyed by immutable strategy ID, including legacy records.
+
+    Older local files keyed aliases by their long Windows archive directory.
+    Published archives deliberately use their immutable short IDs as folder
+    names, so resolve every legacy key through the identity database at read
+    time.  This preserves existing names across packaging and platforms.
+    """
     path = ROOT / DISPLAY_NAMES_FILE
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -279,9 +286,9 @@ def _experiment_display_names() -> dict[str, str]:
     if not isinstance(names, dict):
         return {}
     return {
-        _archive_presentation_key(str(archive_name)): str(title).strip()
+        _archive_presentation_key(archive_name): str(title).strip()
         for archive_name, title in names.items()
-        if _archive_presentation_key(str(archive_name)) and str(title).strip()
+        if _archive_presentation_key(archive_name) and str(title).strip()
     }
 
 
@@ -314,7 +321,7 @@ def _set_experiment_display_name(experiment_dir: Path, title: object, original_n
 
 
 def _experiment_notes() -> dict[str, str]:
-    """Load notes by immutable ID and translate legacy directory keys."""
+    """Load notes keyed by immutable strategy ID, including legacy records."""
     path = ROOT / EXPERIMENT_NOTES_FILE
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -324,9 +331,9 @@ def _experiment_notes() -> dict[str, str]:
     if not isinstance(notes, dict):
         return {}
     return {
-        _archive_presentation_key(str(archive_name)): re.sub(r"\s+", " ", str(note)).strip()
+        _archive_presentation_key(archive_name): re.sub(r"\s+", " ", str(note)).strip()
         for archive_name, note in notes.items()
-        if _archive_presentation_key(str(archive_name)) and str(note).strip()
+        if _archive_presentation_key(archive_name) and str(note).strip()
     }
 
 
@@ -352,7 +359,9 @@ def _set_experiment_note(experiment_dir: Path, note: object) -> None:
 
 
 def _archive_run_id(experiment_dir: Path) -> str | None:
-    archive_name = _archive_directory_name(experiment_dir)
+    archive_name = _portable_archive_name(experiment_dir)
+    # This is the canonical read-only identity lookup.  It supports both the
+    # legacy timestamped local archive directory and public short-ID folders.
     registered_identity = strategy_id_for_archive(ROOT, archive_name)
     if registered_identity:
         return registered_identity
@@ -558,7 +567,7 @@ def _render_result_rename_bridge() -> None:
 
 def _render_favorite_button(experiment_dir: Path, *, key: str, container: object = st) -> None:
     """Show the common orange bookmark without rerunning the result page."""
-    archive_name = Path(experiment_dir).name
+    archive_name = _portable_archive_name(experiment_dir)
     if not archive_name or archive_name.startswith("本次结果"):
         return
 
@@ -566,7 +575,7 @@ def _render_favorite_button(experiment_dir: Path, *, key: str, container: object
     # workspace therefore remain in place instead of visibly rebuilding.
     @st.fragment
     def render_control() -> None:
-        is_favorite = archive_name.casefold() in _favorite_experiment_ids()
+        is_favorite = archive_name in _favorite_experiment_ids()
         state_key = f"{key}_bookmark"
         safe_key = re.sub(r"[^a-zA-Z0-9_-]+", "_", key)
         state_class = "saved" if is_favorite else "empty"
@@ -1331,13 +1340,41 @@ def _select_config() -> Path:
     )
 
 
+def _data_file_version(path: Path) -> tuple[str, int, int]:
+    """Return a cache key that changes whenever a source CSV is replaced."""
+    try:
+        stat = path.stat()
+    except OSError:
+        return str(path), 0, 0
+    return str(path), int(stat.st_mtime_ns), int(stat.st_size)
+
+
+def _market_input_version() -> tuple[tuple[str, int, int], ...]:
+    """Version both legs of the merged market return series."""
+    return tuple(
+        _data_file_version(curve_path(ROOT, curve_id))
+        for curve_id in ("local_gov_10y", GOV_10Y)
+    )
+
+
 @st.cache_data(show_spinner=False)
-def _benchmark_date_bounds() -> tuple[object, object]:
+def _benchmark_date_bounds(data_version: tuple[tuple[str, int, int], ...]) -> tuple[object, object]:
+    # ``data_version`` is deliberately part of the cache key.  The result is
+    # derived from CSV inputs, so a zero-argument Streamlit cache would keep
+    # showing the prior upload's last date until the server restarted.
+    del data_version
     return market_date_bounds(ROOT, GOV_10Y)
 
 
 @st.cache_data(show_spinner=False)
-def _full_strategy_date_bounds(signal_frequency: str = "weekly") -> tuple[str, str]:
+def _full_strategy_date_bounds(
+    signal_frequency: str = "weekly",
+    data_version: tuple[tuple[str, int, int], ...] = (),
+    signal_version: tuple[str, int, int] = ("", 0, 0),
+) -> tuple[str, str]:
+    # See _benchmark_date_bounds: both market and signal files are source
+    # inputs and must invalidate this derived range after a local refresh.
+    del data_version, signal_version
     signal_path = ROOT / signal_file_for_frequency(signal_frequency)
     benchmark_dates = load_market_data(ROOT, GOV_10Y)["date"]
     signal_dates = pd.to_datetime(
@@ -1387,7 +1424,7 @@ def _sidebar_config(
         help="日频按交易日更新信号和目标仓位；周频沿用每周看板。",
     )
     selected_frequency = "daily" if frequency_label == "日频" else "weekly"
-    available_start, available_end = _benchmark_date_bounds()
+    available_start, available_end = _benchmark_date_bounds(_market_input_version())
     if st.sidebar.button("使用最新行情结束日", use_container_width=True, key=widget_key("use_latest_end")):
         st.session_state[widget_key("end_date")] = available_end
         st.rerun()
@@ -2350,6 +2387,7 @@ def _run_display_name(experiment_dir: Path | None, strategy_name: object) -> str
     name = _normalise_display_name(strategy_name)
     if experiment_dir is None:
         return name
+    archive_name = Path(experiment_dir).name
     archive_id = _archive_run_id(Path(experiment_dir))
     if archive_id is None:
         return name
@@ -3426,7 +3464,7 @@ def _render_factor_expansion_launch_panel() -> None:
         "<div class='section-head'><h2>因子增加研究</h2><p>完整原始8因子加新增因子时做对照；任意子集则作为一条独立策略搜索。</p></div>",
         unsafe_allow_html=True,
     )
-    available_start, available_end = _benchmark_date_bounds()
+    available_start, available_end = _benchmark_date_bounds(_market_input_version())
     scope = st.segmented_control(
         "研究范围", ["全量六路线比较", "单一策略对测试"], default="全量六路线比较", key="factor_expansion_scope_kind",
         help="全量比较运行收益、胜率、综合与日频、周频共六组；单一策略对只运行所选目标和频率。实际是否生成原始/扩展对照，由事前启用因子决定。",
@@ -4748,7 +4786,11 @@ def _render_home_research_snapshot() -> None:
         valid_rows = []
         for _, row in valid.iterrows():
             frequency = "daily" if row.get("信号频率") == "日频" else "weekly"
-            full_start, full_end = _full_strategy_date_bounds(frequency)
+            full_start, full_end = _full_strategy_date_bounds(
+                frequency,
+                _market_input_version(),
+                _data_file_version(ROOT / signal_file_for_frequency(frequency)),
+            )
             start = pd.to_datetime(row.get("回测起始日期"), errors="coerce")
             end = pd.to_datetime(row.get("回测结束日期"), errors="coerce")
             if pd.notna(start) and pd.notna(end) and start.strftime("%Y-%m-%d") == full_start and end.strftime("%Y-%m-%d") == full_end:
@@ -5560,13 +5602,13 @@ def _render_experiment_history(show_report: bool = False) -> None:
     # the table component.
     favorite_target = str(st.query_params.get("favorite", "")).strip()
     if favorite_target:
-        target_dir = ROOT / "backtest_outputs" / "experiments" / _archive_directory_name(favorite_target)
+        target_dir = ROOT / "backtest_outputs" / "experiments" / Path(favorite_target).name
         if (target_dir / "run_manifest.json").exists():
             requested_state = str(st.query_params.get("favorite_set", "")).strip().lower()
             if requested_state in {"saved", "empty"}:
                 _set_experiment_favorite(target_dir, requested_state == "saved")
             else:
-                _set_experiment_favorite(target_dir, _archive_directory_name(target_dir).casefold() not in _favorite_experiment_ids())
+                _set_experiment_favorite(target_dir, target_dir.name not in _favorite_experiment_ids())
         st.query_params.pop("favorite", None)
         st.query_params.pop("favorite_state", None)
         st.query_params.pop("favorite_current", None)
@@ -5589,12 +5631,12 @@ def _render_experiment_history(show_report: bool = False) -> None:
         for path, name in zip(table_source["实验目录"], table_source["策略名称"])
     ]
     table_source["备注"] = [
-        notes.get(_archive_presentation_key(path), "")
+        notes.get(_archive_presentation_key(str(path)), "")
         for path in table_source["实验目录"]
     ]
     if only_favorites:
         table_source = table_source.loc[
-            table_source["实验目录"].map(lambda value: _archive_directory_name(value).casefold() in favorites)
+            table_source["实验目录"].map(lambda value: Path(str(value)).name in favorites)
         ].copy()
         if table_source.empty:
             st.caption("暂无收藏记录。可在任一结果页点击书签图标。")
@@ -5620,15 +5662,15 @@ def _render_experiment_history(show_report: bool = False) -> None:
     display.insert(
         0,
         "打开结果",
-        [f"/history?experiment={quote(_archive_directory_name(path))}" for path in display["实验目录"]],
+        [f"/history?experiment={quote(Path(str(path)).name)}" for path in display["实验目录"]],
     )
     display.insert(
         1,
         "收藏",
         [
-            f"/history?favorite={quote(_archive_directory_name(path))}"
-            f"&favorite_current={'saved' if _archive_directory_name(path).casefold() in favorites else 'empty'}"
-            f"&favorite_set={'empty' if _archive_directory_name(path).casefold() in favorites else 'saved'}"
+            f"/history?favorite={quote(Path(str(path)).name)}"
+            f"&favorite_current={'saved' if Path(str(path)).name in favorites else 'empty'}"
+            f"&favorite_set={'empty' if Path(str(path)).name in favorites else 'saved'}"
             for path in display["实验目录"]
         ],
     )
@@ -5693,7 +5735,7 @@ def _render_search_page() -> None:
     st.caption("使用现有因子，搜索权重、因子判定阈值和看空规则。新增因子的对照搜索统一在“因子研究”页运行。")
     baseline = _search_baseline_controls()
     objective = _search_objective_controls(baseline.objective)
-    available_start, available_end = _benchmark_date_bounds()
+    available_start, available_end = _benchmark_date_bounds(_market_input_version())
     default_cutoff = min(max(pd.Timestamp("2025-01-01").date(), available_start), available_end)
     training_end = st.date_input(
         "训练截止日",
@@ -5999,7 +6041,7 @@ def _render_rolling_research_page() -> None:
         source_config_path=baseline.source_config_path,
     )
     baseline = record_manual_changes(previous_baseline, baseline, ROOT)
-    available_start, available_end = _benchmark_date_bounds()
+    available_start, available_end = _benchmark_date_bounds(_market_input_version())
     default_end = min(max(pd.Timestamp("2025-06-30").date(), available_start), available_end)
     st.markdown(
         "<div class='section-head'><h2>训练与定参规则</h2><p>每次只用训练窗口内的数据搜索；选出的参数只在紧随其后的样本外区间执行。</p></div>",
