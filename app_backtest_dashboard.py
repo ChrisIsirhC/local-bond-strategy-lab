@@ -221,6 +221,20 @@ def _archive_directory_name(value: str | Path) -> str:
     return Path(str(value).replace("\\", "/")).name
 
 
+def _archive_presentation_key(experiment_dir: str | Path) -> str:
+    """Use the immutable strategy ID for all user-entered presentation data.
+
+    The published archive folders are compact IDs while the original local
+    name/remark files were keyed by long Windows directory names.  Resolving
+    the legacy key through the strategy registry preserves those values across
+    both directory layouts without altering frozen experiment data.
+    """
+    archive_name = _archive_directory_name(experiment_dir)
+    if not archive_name:
+        return ""
+    return strategy_id_for_archive(ROOT, archive_name) or archive_name
+
+
 def _favorite_experiment_ids() -> set[str]:
     """Read the user's local, display-only experiment collection."""
     path = ROOT / FAVORITES_FILE
@@ -255,7 +269,7 @@ def _set_experiment_favorite(experiment_dir: Path, favorite: bool) -> None:
 
 
 def _experiment_display_names() -> dict[str, str]:
-    """Load user-assigned archive titles without altering frozen results."""
+    """Load aliases by immutable ID and translate legacy directory keys."""
     path = ROOT / DISPLAY_NAMES_FILE
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -265,9 +279,9 @@ def _experiment_display_names() -> dict[str, str]:
     if not isinstance(names, dict):
         return {}
     return {
-        Path(str(archive_name)).name: str(title).strip()
+        _archive_presentation_key(str(archive_name)): str(title).strip()
         for archive_name, title in names.items()
-        if str(archive_name).strip() and str(title).strip()
+        if _archive_presentation_key(str(archive_name)) and str(title).strip()
     }
 
 
@@ -279,16 +293,16 @@ def _normalise_display_name(value: object) -> str:
 
 def _set_experiment_display_name(experiment_dir: Path, title: object, original_name: object) -> None:
     """Persist a reversible display alias keyed by immutable archive directory."""
-    archive_name = _archive_directory_name(experiment_dir)
-    if not archive_name:
+    presentation_key = _archive_presentation_key(experiment_dir)
+    if not presentation_key:
         return
     names = _experiment_display_names()
     normalized = _normalise_display_name(title)
     original = _normalise_display_name(original_name)
     if not normalized or normalized == original:
-        names.pop(archive_name, None)
+        names.pop(presentation_key, None)
     else:
-        names[archive_name] = normalized
+        names[presentation_key] = normalized
     path = ROOT / DISPLAY_NAMES_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp")
@@ -300,7 +314,7 @@ def _set_experiment_display_name(experiment_dir: Path, title: object, original_n
 
 
 def _experiment_notes() -> dict[str, str]:
-    """Load local researcher notes keyed by immutable archive directory."""
+    """Load notes by immutable ID and translate legacy directory keys."""
     path = ROOT / EXPERIMENT_NOTES_FILE
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -310,23 +324,23 @@ def _experiment_notes() -> dict[str, str]:
     if not isinstance(notes, dict):
         return {}
     return {
-        Path(str(archive_name)).name: re.sub(r"\s+", " ", str(note)).strip()
+        _archive_presentation_key(str(archive_name)): re.sub(r"\s+", " ", str(note)).strip()
         for archive_name, note in notes.items()
-        if str(archive_name).strip() and str(note).strip()
+        if _archive_presentation_key(str(archive_name)) and str(note).strip()
     }
 
 
 def _set_experiment_note(experiment_dir: Path, note: object) -> None:
     """Persist a display-only archive note without touching frozen results."""
-    archive_name = Path(experiment_dir).name
-    if not archive_name:
+    presentation_key = _archive_presentation_key(experiment_dir)
+    if not presentation_key:
         return
     notes = _experiment_notes()
     cleaned = re.sub(r"\s+", " ", str(note or "")).strip()[:280]
     if cleaned:
-        notes[archive_name] = cleaned
+        notes[presentation_key] = cleaned
     else:
-        notes.pop(archive_name, None)
+        notes.pop(presentation_key, None)
     path = ROOT / EXPERIMENT_NOTES_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp")
@@ -338,7 +352,10 @@ def _set_experiment_note(experiment_dir: Path, note: object) -> None:
 
 
 def _archive_run_id(experiment_dir: Path) -> str | None:
-    archive_name = Path(experiment_dir).name
+    archive_name = _archive_directory_name(experiment_dir)
+    registered_identity = strategy_id_for_archive(ROOT, archive_name)
+    if registered_identity:
+        return registered_identity
     if "__" not in archive_name:
         return None
     try:
@@ -365,7 +382,7 @@ def _render_rename_experiment_dialog(experiment_dir: Path) -> None:
         st.error("无法读取该历史实验的原始策略名称。")
         return
     archive_id = _archive_run_id(experiment_dir) or "未分配"
-    custom_title = _experiment_display_names().get(Path(experiment_dir).name, "")
+    custom_title = _experiment_display_names().get(_archive_presentation_key(experiment_dir), "")
     default_title = custom_title or _normalise_display_name(original_name)
     st.caption(f"运行 ID：{archive_id}。编号、归档目录、配置和研究溯源不会变更。")
     title = st.text_input(
@@ -2333,11 +2350,10 @@ def _run_display_name(experiment_dir: Path | None, strategy_name: object) -> str
     name = _normalise_display_name(strategy_name)
     if experiment_dir is None:
         return name
-    archive_name = Path(experiment_dir).name
     archive_id = _archive_run_id(Path(experiment_dir))
     if archive_id is None:
         return name
-    display_name = _experiment_display_names().get(archive_name, name)
+    display_name = _experiment_display_names().get(_archive_presentation_key(experiment_dir), name)
     return f"[{archive_id}] {_normalise_display_name(display_name)}"
 
 
@@ -2435,7 +2451,7 @@ def _provenance_reference_html(reference: object) -> str:
             original = _normalise_display_name(load_strategy_config(experiment_dir / "config.json").name)
         except (OSError, ValueError, TypeError, AttributeError, json.JSONDecodeError):
             pass
-        alias = _experiment_display_names().get(archive_name)
+        alias = _experiment_display_names().get(_archive_presentation_key(experiment_dir))
         display_name = _run_display_name(experiment_dir, original)
         target = quote(experiment_dir.name)
         text = (
@@ -4634,7 +4650,7 @@ def _render_historical_result_page(experiment_id: str) -> None:
             if new_experiment_dir is not None:
                 _switch_to_history_experiment(new_experiment_dir)
     display_name = _run_display_name(experiment_dir, config.name)
-    archive_note = _experiment_notes().get(experiment_dir.name, "")
+    archive_note = _experiment_notes().get(_archive_presentation_key(experiment_dir), "")
     note_class = " has-note" if archive_note else ""
     note_label = f"备注：{archive_note}" if archive_note else "添加备注"
     st.markdown(
@@ -4680,7 +4696,7 @@ def _render_historical_sidebar(config: DashboardStrategyConfig, experiment_dir: 
     st.sidebar.markdown("## 历史结果参数")
     st.sidebar.caption("参数来自该次实验归档，只读展示，不会被当前首页配置替换。")
     st.sidebar.markdown(f"**策略名称**  \n{_run_display_name(experiment_dir, config.name)}")
-    custom_title = _experiment_display_names().get(experiment_dir.name)
+    custom_title = _experiment_display_names().get(_archive_presentation_key(experiment_dir))
     if custom_title:
         st.sidebar.caption(f"归档原名：{_normalise_display_name(config.name)}")
     st.sidebar.caption(f"信号频率：{'日频' if config.signal_frequency == 'daily' else '周频'}")
@@ -5573,7 +5589,7 @@ def _render_experiment_history(show_report: bool = False) -> None:
         for path, name in zip(table_source["实验目录"], table_source["策略名称"])
     ]
     table_source["备注"] = [
-        notes.get(_archive_directory_name(path), "")
+        notes.get(_archive_presentation_key(path), "")
         for path in table_source["实验目录"]
     ]
     if only_favorites:
@@ -5805,18 +5821,10 @@ def _render_rolling_task_queue() -> None:
     def readonly_run_display_name(experiment_dir: Path, strategy_name: object) -> str:
         """Display an already registered archive ID without mutating the registry."""
         name = _normalise_display_name(strategy_name)
-        archive_name = Path(experiment_dir).name
-        if "__" not in archive_name:
-            return name
-        try:
-            manifest = json.loads((Path(experiment_dir) / "run_manifest.json").read_text(encoding="utf-8"))
-            id_prefix = archive_id_prefix(str(manifest.get("运行来源", "")))
-        except (OSError, json.JSONDecodeError):
-            id_prefix = "B"
-        archive_id = existing_short_archive_id(ROOT, archive_id_category(id_prefix), archive_name)
+        archive_id = _archive_run_id(experiment_dir)
         if not archive_id:
             return name
-        display_name = _experiment_display_names().get(archive_name, name)
+        display_name = _experiment_display_names().get(_archive_presentation_key(experiment_dir), name)
         return f"[{archive_id}] {_normalise_display_name(display_name)}"
 
     def strategy_display(task: dict[str, object]) -> str:

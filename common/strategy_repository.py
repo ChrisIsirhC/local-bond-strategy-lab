@@ -285,6 +285,7 @@ def ensure_strategy_ids(
     # Archive lookups are a hot UI path.  A just-created binding must become
     # visible immediately, including when an earlier render cached ``None``.
     _strategy_id_lookup.cache_clear()
+    _strategy_id_by_identifier_lookup.cache_clear()
     return result
 
 
@@ -300,6 +301,19 @@ def _strategy_id_lookup(root_text: str, archive_name: str) -> str | None:
         return None
 
 
+@lru_cache(maxsize=4096)
+def _strategy_id_by_identifier_lookup(root_text: str, strategy_id: str) -> str | None:
+    """Cache public short-ID validation on repeated result-table renders."""
+    try:
+        with _connection(Path(root_text)) as connection:
+            row = connection.execute(
+                "SELECT strategy_id FROM strategy_identity WHERE strategy_id = ?", (strategy_id,)
+            ).fetchone()
+            return str(row["strategy_id"]) if row is not None else None
+    except (sqlite3.Error, ValueError):
+        return None
+
+
 def strategy_id_for_archive(root: Path, archive_name: str) -> str | None:
     """Read an immutable strategy identity without reopening SQLite on each UI render."""
     # Public deployments may address an archive by its immutable strategy ID
@@ -308,16 +322,7 @@ def strategy_id_for_archive(root: Path, archive_name: str) -> str | None:
     # this never creates or mutates an ID.
     normalized = str(archive_name).upper().strip()
     if _IDENTIFIER_RE.fullmatch(normalized):
-        try:
-            with _connection(Path(root)) as connection:
-                row = connection.execute(
-                    "SELECT strategy_id FROM strategy_identity WHERE strategy_id = ?",
-                    (normalized,),
-                ).fetchone()
-                if row is not None:
-                    return str(row["strategy_id"])
-        except (sqlite3.Error, ValueError):
-            return None
+        return _strategy_id_by_identifier_lookup(str(Path(root).resolve()), normalized)
     return _strategy_id_lookup(str(Path(root).resolve()), str(archive_name))
 
 
