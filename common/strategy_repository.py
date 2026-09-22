@@ -2,9 +2,14 @@
 
 The backtest engine still keeps large numerical artifacts in files.  This
 module is intentionally limited to the relational facts that must remain
-unique and queryable: strategy identity, presentation state, archive metadata
-and artifact fingerprints.  In particular, a strategy ID is the sole public
-identifier of an archived strategy; it is never derived by scanning folders.
+unique and queryable: the local strategy ID, the cross-machine archive UID,
+presentation state, archive metadata and artifact fingerprints.
+
+``strategy_id`` is unique and immutable *inside one repository*.  The
+timestamp-with-microseconds ``archive_uid`` is the immutable identity used to
+compare a workstation with a deployed repository.  It deliberately contains
+no editable strategy name.  A synchronizer must therefore compare UIDs first
+and only allocate a new local strategy ID when an imported UID is absent.
 """
 
 from __future__ import annotations
@@ -23,6 +28,23 @@ from typing import Any, Iterator
 METADATA_PATH = Path("backtest_outputs") / "strategy_metadata.sqlite"
 LEGACY_ID_REGISTRY_PATH = Path("backtest_outputs") / "archive_id_registry.json"
 _IDENTIFIER_RE = re.compile(r"^[A-Z][0-9]{3,}$")
+# Current archives include microseconds.  The older, still-valid archives
+# used the same date-plus-exact-second key; accept both formats so a schema
+# upgrade never drops legacy history from the index.
+_ARCHIVE_UID_RE = re.compile(r"^(\d{8}_\d{6}(?:_\d{6})?)(?:__|$)")
+
+
+def archive_uid_from_value(value: object) -> str | None:
+    """Extract the immutable timestamp key without consulting a title/path.
+
+    Archive folders may retain a human-readable suffix for convenience, but
+    no index, synchronization check or presentation record may use that
+    suffix as identity.
+    """
+    text = str(value or "").strip().replace("\\", "/").rstrip("/")
+    text = text.rsplit("/", 1)[-1]
+    matched = _ARCHIVE_UID_RE.match(text)
+    return matched.group(1) if matched else None
 
 
 def metadata_path(root: Path) -> Path:
@@ -67,6 +89,7 @@ def _create_schema(connection: sqlite3.Connection) -> None:
             strategy_id TEXT PRIMARY KEY
                 CHECK (strategy_id GLOB '[A-Z][0-9][0-9][0-9]*'),
             archive_name TEXT NOT NULL UNIQUE,
+            archive_uid TEXT UNIQUE,
             source_category TEXT NOT NULL,
             id_prefix TEXT NOT NULL CHECK (length(id_prefix) = 1),
             created_at TEXT NOT NULL,
@@ -162,6 +185,28 @@ def _ensure_schema_extensions(connection: sqlite3.Connection) -> None:
         )
     if "staged_relative_path" not in columns:
         connection.execute("ALTER TABLE strategy_artifact ADD COLUMN staged_relative_path TEXT")
+    identity_columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(strategy_identity)")}
+    if "archive_uid" not in identity_columns:
+        connection.execute("ALTER TABLE strategy_identity ADD COLUMN archive_uid TEXT")
+    # The first 22 characters of every modern long archive are the frozen
+    # timestamp key.  Populate it once for old metadata without renaming or
+    # deleting any archive directory.  Rows from unit tests/very old imports
+    # without that key remain readable but cannot be used for cross-machine
+    # identity matching until explicitly migrated.
+    rows = connection.execute(
+        "SELECT strategy_id, archive_name, archive_uid FROM strategy_identity WHERE archive_uid IS NULL OR archive_uid = ''"
+    ).fetchall()
+    for row in rows:
+        archive_uid = archive_uid_from_value(row["archive_name"])
+        if archive_uid:
+            connection.execute(
+                "UPDATE strategy_identity SET archive_uid = ? WHERE strategy_id = ?",
+                (archive_uid, row["strategy_id"]),
+            )
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_strategy_identity_archive_uid "
+        "ON strategy_identity(archive_uid) WHERE archive_uid IS NOT NULL"
+    )
 
 
 def _import_legacy_registry_if_needed(connection: sqlite3.Connection, root: Path) -> None:
@@ -205,11 +250,11 @@ def _import_legacy_registry_if_needed(connection: sqlite3.Connection, root: Path
                 raise ValueError(f"归档 {archive_name} 已绑定 {existing['strategy_id']}，不能改为 {strategy_id}")
             connection.execute(
                 """
-                INSERT INTO strategy_identity(strategy_id, archive_name, source_category, id_prefix, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO strategy_identity(strategy_id, archive_name, archive_uid, source_category, id_prefix, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(strategy_id) DO NOTHING
                 """,
-                (strategy_id, archive_name, str(category), prefix, now),
+                (strategy_id, archive_name, archive_uid_from_value(archive_name), str(category), prefix, now),
             )
             max_by_prefix[prefix] = max(max_by_prefix.get(prefix, 0), int(strategy_id[1:]))
 
@@ -265,12 +310,25 @@ def ensure_strategy_ids(
             if archive_name in assigned:
                 continue
             strategy_id = f"{normalized_prefix}{next_number:03d}"
+            archive_uid = archive_uid_from_value(archive_name)
+            if archive_uid:
+                uid_owner = connection.execute(
+                    "SELECT strategy_id, archive_name FROM strategy_identity WHERE archive_uid = ?",
+                    (archive_uid,),
+                ).fetchone()
+                if uid_owner is not None:
+                    # A timestamp UID is a cross-machine identity, never a
+                    # reason to create a second local strategy row.  Callers
+                    # importing it must resolve the existing row first.
+                    raise ValueError(
+                        f"唯一归档键冲突：{archive_uid} 已属于 {uid_owner['strategy_id']}/{uid_owner['archive_name']}"
+                    )
             connection.execute(
                 """
-                INSERT INTO strategy_identity(strategy_id, archive_name, source_category, id_prefix, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO strategy_identity(strategy_id, archive_name, archive_uid, source_category, id_prefix, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (strategy_id, archive_name, str(category), normalized_prefix, now),
+                (strategy_id, archive_name, archive_uid, str(category), normalized_prefix, now),
             )
             assigned[archive_name] = strategy_id
             next_number += 1
@@ -286,6 +344,8 @@ def ensure_strategy_ids(
     # visible immediately, including when an earlier render cached ``None``.
     _strategy_id_lookup.cache_clear()
     _strategy_id_by_identifier_lookup.cache_clear()
+    _strategy_id_by_archive_uid_lookup.cache_clear()
+    _archive_uid_by_strategy_id_lookup.cache_clear()
     return result
 
 
@@ -347,6 +407,60 @@ def archive_name_for_strategy_id(root: Path, strategy_id: str) -> str | None:
     return _archive_name_by_identifier_lookup(str(Path(root).resolve()), normalized)
 
 
+@lru_cache(maxsize=4096)
+def _strategy_id_by_archive_uid_lookup(root_text: str, archive_uid: str) -> str | None:
+    try:
+        with _connection(Path(root_text)) as connection:
+            row = connection.execute(
+                "SELECT strategy_id FROM strategy_identity WHERE archive_uid = ?", (archive_uid,)
+            ).fetchone()
+            return str(row["strategy_id"]) if row is not None else None
+    except (sqlite3.Error, ValueError):
+        return None
+
+
+def strategy_id_for_archive_uid(root: Path, archive_uid: object) -> str | None:
+    """Resolve the cross-machine immutable key to this repository's local ID."""
+    normalized = archive_uid_from_value(archive_uid)
+    if not normalized:
+        return None
+    return _strategy_id_by_archive_uid_lookup(str(Path(root).resolve()), normalized)
+
+
+@lru_cache(maxsize=4096)
+def _archive_uid_by_strategy_id_lookup(root_text: str, strategy_id: str) -> str | None:
+    try:
+        with _connection(Path(root_text)) as connection:
+            row = connection.execute(
+                "SELECT archive_uid FROM strategy_identity WHERE strategy_id = ?", (strategy_id,)
+            ).fetchone()
+            return str(row["archive_uid"]) if row is not None and row["archive_uid"] else None
+    except (sqlite3.Error, ValueError):
+        return None
+
+
+def archive_uid_for_strategy_id(root: Path, strategy_id: str) -> str | None:
+    """Return the timestamp-only identity associated with a local ID."""
+    normalized = str(strategy_id).upper().strip()
+    if not _IDENTIFIER_RE.fullmatch(normalized):
+        return None
+    return _archive_uid_by_strategy_id_lookup(str(Path(root).resolve()), normalized)
+
+
+def archive_uid_for_archive(root: Path, archive_name: object) -> str | None:
+    """Resolve a storage address to the frozen timestamp identity.
+
+    This helper deliberately does not use display names.  It first extracts
+    the timestamp from the folder/manifest key and then confirms it against
+    the local identity registry when one exists.
+    """
+    candidate = archive_uid_from_value(archive_name)
+    if candidate:
+        return candidate
+    strategy_id = strategy_id_for_archive(root, str(archive_name))
+    return archive_uid_for_strategy_id(root, strategy_id) if strategy_id else None
+
+
 def favorite_strategy_ids(root: Path) -> set[str]:
     """Return presentation records explicitly marked as favorites.
 
@@ -362,6 +476,26 @@ def favorite_strategy_ids(root: Path) -> set[str]:
     except (sqlite3.Error, ValueError):
         return set()
     return {str(row["strategy_id"]) for row in rows}
+
+
+def favorite_archive_uids(root: Path) -> set[str]:
+    """Return favorites by the cross-machine identity, not the local ID."""
+    try:
+        with _connection(Path(root)) as connection:
+            rows = connection.execute(
+                """
+                SELECT identity_row.archive_uid
+                FROM strategy_presentation AS presentation
+                JOIN strategy_identity AS identity_row
+                  ON identity_row.strategy_id = presentation.strategy_id
+                WHERE presentation.is_favorite = 1
+                  AND identity_row.archive_uid IS NOT NULL
+                  AND identity_row.archive_uid != ''
+                """
+            ).fetchall()
+    except (sqlite3.Error, ValueError):
+        return set()
+    return {str(row["archive_uid"]) for row in rows}
 
 
 def set_strategy_favorite(root: Path, strategy_id: str, favorite: bool) -> bool:
@@ -397,6 +531,15 @@ def set_strategy_favorite(root: Path, strategy_id: str, favorite: bool) -> bool:
     return True
 
 
+def set_archive_favorite(root: Path, archive_uid: object, favorite: bool) -> bool:
+    """Set a favorite through the immutable cross-machine archive key."""
+    normalized = archive_uid_from_value(archive_uid)
+    if not normalized:
+        return False
+    strategy_id = strategy_id_for_archive_uid(root, normalized)
+    return set_strategy_favorite(root, strategy_id, favorite) if strategy_id else False
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -418,6 +561,7 @@ def register_strategy_archive(
     archive_dir = Path(archive_dir).resolve()
     root = Path(root).resolve()
     archive_name = archive_dir.name
+    archive_uid = archive_uid_from_value(manifest.get("archive_uid") or archive_name)
     manifest_path = archive_dir / "run_manifest.json"
     config_path = archive_dir / "config.json"
     if not manifest_path.exists() or not config_path.exists():
@@ -425,10 +569,16 @@ def register_strategy_archive(
     with _connection(root) as connection:
         connection.execute("BEGIN IMMEDIATE")
         row = connection.execute(
-            "SELECT strategy_id, archive_name FROM strategy_identity WHERE strategy_id = ?", (strategy_id,)
+            "SELECT strategy_id, archive_name, archive_uid FROM strategy_identity WHERE strategy_id = ?", (strategy_id,)
         ).fetchone()
         if row is None or str(row["archive_name"]) != archive_name:
             raise ValueError(f"策略 ID {strategy_id} 未绑定当前归档 {archive_name}")
+        if archive_uid and row["archive_uid"] and str(row["archive_uid"]) != archive_uid:
+            raise ValueError(f"策略唯一归档键已被篡改：{strategy_id} 保存为 {archive_uid}，注册表为 {row['archive_uid']}")
+        if archive_uid and not row["archive_uid"]:
+            connection.execute(
+                "UPDATE strategy_identity SET archive_uid = ? WHERE strategy_id = ?", (archive_uid, strategy_id)
+            )
         archive_relative = str(archive_dir.relative_to(root)).replace("\\", "/")
         connection.execute(
             """

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from dataclasses import replace
+from functools import lru_cache
 from html import escape
 import json
 import re
@@ -35,9 +36,9 @@ from common.result_store import (
     write_rolling_reproduction_bundle,
 )
 from common.strategy_repository import (
-    archive_name_for_strategy_id,
-    favorite_strategy_ids,
-    set_strategy_favorite,
+    archive_uid_for_archive,
+    favorite_archive_uids,
+    set_archive_favorite,
     strategy_id_for_archive,
 )
 from common.provenance import (
@@ -222,18 +223,8 @@ def _strategy_config_picker(
 
 
 def _favorite_experiment_ids() -> set[str]:
-    """Read favorite IDs while retaining long archive names on disk.
-
-    The deployed archive index deliberately carries both ``运行ID`` and the
-    canonical timestamped ``archive_name``.  Resolve through that published
-    table first so bookmarks do not disappear if SQLite metadata is rebuilt
-    or unavailable on Streamlit Cloud; SQLite remains a fallback for local
-    archives not yet present in the public index.
-    """
-    # SQLite is the authoritative local presentation store.  The legacy JSON
-    # remains a deployed-data compatibility layer: public packages can still
-    # ship existing favorites even before their metadata database is rebuilt.
-    resolved = set(favorite_strategy_ids(ROOT))
+    """Read favorites by timestamp-only archive UID, with JSON migration."""
+    resolved = set(favorite_archive_uids(ROOT))
     try:
         runtime_overrides = st.session_state.get("_favorite_overrides", {})
     except Exception:
@@ -250,27 +241,25 @@ def _favorite_experiment_ids() -> set[str]:
     entries = payload.get("experiments", []) if isinstance(payload, dict) else []
     if not isinstance(entries, list):
         return {item for item in resolved if item}
-    saved_names = {_portable_archive_name(entry) for entry in entries if str(entry).strip()}
-    if not saved_names:
+    saved_uids = {
+        archive_uid_for_archive(ROOT, _portable_archive_name(entry))
+        for entry in entries if str(entry).strip()
+    }
+    saved_uids.discard(None)
+    if not saved_uids:
         return {item for item in resolved if item}
     try:
         index_payload = json.loads((ROOT / "backtest_outputs" / "experiments_index.json").read_text(encoding="utf-8"))
         index_rows = index_payload.get("rows", []) if isinstance(index_payload, dict) else []
     except (OSError, json.JSONDecodeError):
         index_rows = []
-    indexed_names: set[str] = set()
     for row in index_rows:
         if not isinstance(row, dict):
             continue
-        archive_name = _portable_archive_name(row.get("archive_name") or row.get("archive_key"))
-        strategy_id = str(row.get("运行ID", "")).upper().strip()
-        if archive_name in saved_names and strategy_id:
-            resolved.add(strategy_id)
-            indexed_names.add(archive_name)
-    # Keep working with unindexed local archives rather than dropping their
-    # bookmarks during the next history-index refresh.
-    for archive_name in saved_names - indexed_names:
-        resolved.add(_archive_presentation_key(archive_name))
+        archive_uid = str(row.get("archive_uid") or "").strip()
+        if archive_uid in saved_uids:
+            resolved.add(archive_uid)
+    resolved.update(saved_uids)
     return {item for item in resolved if item}
 
 
@@ -286,30 +275,65 @@ def _portable_archive_name(value: object) -> str:
     return text.rsplit("/", 1)[-1] if text else ""
 
 
+@lru_cache(maxsize=16)
+def _archive_uid_index_lookup(root_text: str, index_mtime_ns: int) -> dict[str, str]:
+    """Cache compact-ID/UID resolution for lightweight public archives."""
+    del index_mtime_ns  # The argument invalidates this cache when the index changes.
+    path = Path(root_text) / "backtest_outputs" / "experiments_index.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        rows = payload.get("rows", []) if isinstance(payload, dict) else []
+    except (OSError, json.JSONDecodeError):
+        return {}
+    lookup: dict[str, str] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        archive_uid = str(row.get("archive_uid") or "").strip()
+        if not archive_uid:
+            continue
+        for value in (
+            row.get("strategy_id"), row.get("运行ID"),
+            _portable_archive_name(row.get("storage_path") or row.get("实验目录")),
+        ):
+            key = str(value or "").upper().strip()
+            if key:
+                lookup[key] = archive_uid
+    return lookup
+
+
 def _archive_presentation_key(experiment_dir: Path | str | object) -> str:
-    """Resolve a presentation record to immutable strategy ID when known."""
+    """Resolve presentation state to the cross-machine archive UID."""
     archive_name = _portable_archive_name(experiment_dir)
     if not archive_name:
         return ""
-    return strategy_id_for_archive(ROOT, archive_name) or archive_name
+    # Public compact directories can be intentionally minimal.  The history
+    # index still carries their immutable UID, so a bookmark must not depend
+    # on a local SQLite copy or on a title-bearing folder name.
+    index_path = ROOT / "backtest_outputs" / "experiments_index.json"
+    try:
+        lookup = _archive_uid_index_lookup(str(ROOT.resolve()), int(index_path.stat().st_mtime_ns))
+        indexed = lookup.get(archive_name.upper())
+        if indexed:
+            return indexed
+    except OSError:
+        pass
+    registered = archive_uid_for_archive(ROOT, archive_name)
+    if registered:
+        return registered
+    return archive_name
 
 
 def _set_experiment_favorite(experiment_dir: Path, favorite: bool) -> None:
-    """Persist favorites by canonical long archive name, never by title.
-
-    The public package opens ``experiments/<strategy_id>`` while the local
-    workstation keeps ``experiments/<timestamped archive_name>``.  Comparing
-    their resolved immutable IDs makes both views show the same bookmark;
-    writing the long name retains the second half of the cross-machine key.
-    """
+    """Persist a favorite by archive UID; never by title or local short ID."""
     archive_name = _portable_archive_name(experiment_dir)
     if not archive_name:
         return
     presentation_key = _archive_presentation_key(archive_name)
-    # First write the identity-keyed presentation record.  A Cloud container
+    # First write the identity-keyed presentation record. A Cloud container
     # may discard runtime files after a restart, but this still gives the
     # active app a single source of truth and does not rely on folder names.
-    set_strategy_favorite(ROOT, presentation_key, favorite)
+    set_archive_favorite(ROOT, presentation_key, favorite)
     try:
         overrides = dict(st.session_state.get("_favorite_overrides", {}))
         overrides[presentation_key] = bool(favorite)
@@ -329,8 +353,7 @@ def _set_experiment_favorite(experiment_dir: Path, favorite: bool) -> None:
     existing = [str(entry) for entry in entries if str(entry).strip()]
     favorites = [entry for entry in existing if _archive_presentation_key(entry) != presentation_key]
     if favorite:
-        canonical_archive_name = archive_name_for_strategy_id(ROOT, presentation_key) or archive_name
-        favorites.append(canonical_archive_name)
+        favorites.append(presentation_key)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix(".tmp")
@@ -344,13 +367,7 @@ def _set_experiment_favorite(experiment_dir: Path, favorite: bool) -> None:
 
 
 def _experiment_display_names() -> dict[str, str]:
-    """Load aliases keyed by immutable strategy ID, including legacy records.
-
-    Older local files keyed aliases by their long Windows archive directory.
-    Published archives deliberately use their immutable short IDs as folder
-    names, so resolve every legacy key through the identity database at read
-    time.  This preserves existing names across packaging and platforms.
-    """
+    """Load aliases keyed by archive UID, including legacy long-folder keys."""
     path = ROOT / DISPLAY_NAMES_FILE
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -373,7 +390,7 @@ def _normalise_display_name(value: object) -> str:
 
 
 def _set_experiment_display_name(experiment_dir: Path, title: object, original_name: object) -> None:
-    """Persist a reversible display alias keyed by immutable archive directory."""
+    """Persist a reversible display alias keyed by immutable archive UID."""
     presentation_key = _archive_presentation_key(experiment_dir)
     if not presentation_key:
         return
@@ -395,7 +412,7 @@ def _set_experiment_display_name(experiment_dir: Path, title: object, original_n
 
 
 def _experiment_notes() -> dict[str, str]:
-    """Load notes keyed by immutable strategy ID, including legacy records."""
+    """Load notes keyed by archive UID, including legacy long-folder keys."""
     path = ROOT / EXPERIMENT_NOTES_FILE
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -2605,13 +2622,17 @@ def _render_workspace(
     experiment_dir: Path,
     current_signals: pd.DataFrame | None = None,
     latest_signal_config: DashboardStrategyConfig | None = None,
+    factor_rolling_periods: tuple[pd.DataFrame, pd.DataFrame] | None = None,
 ) -> None:
     display_result_name = _run_display_name(experiment_dir, result_name)
     st.markdown(
         f"<div class='section-head'><h2>研究工作区</h2><p>结果参数：{escape(display_result_name)} · 图表支持框选与滚轮缩放</p></div>",
         unsafe_allow_html=True,
     )
-    tabs = st.tabs(["交易表现", "传统净值", "收益归因", "错判诊断", "最新信号", "研究溯源", "参数快照"])
+    tab_labels = ["交易表现", "传统净值", "收益归因", "错判诊断", "最新信号", "研究溯源", "参数快照"]
+    if factor_rolling_periods is not None:
+        tab_labels.append("因子完整滚动")
+    tabs = st.tabs(tab_labels)
     with tabs[0]:
         _render_trading_tab(daily, strategy_metrics, benchmark_metrics)
     with tabs[1]:
@@ -2649,6 +2670,10 @@ def _render_workspace(
     with tabs[6]:
         _render_config_snapshot(config)
         st.caption(f"本次实验目录：{experiment_dir}")
+    if factor_rolling_periods is not None:
+        with tabs[7]:
+            period_daily, period_signals = factor_rolling_periods
+            _render_factor_rolling_period_switcher(experiment_dir, period_daily, period_signals)
 
 
 def _display_factor_weights(config: DashboardStrategyConfig) -> dict[str, object]:
@@ -4786,8 +4811,6 @@ def _render_historical_result_page(experiment_id: str) -> None:
         default="样本外" if (is_factor_expansion_archive or is_direct_factor_rolling_archive) else "全区间",
         favorite_experiment=experiment_dir,
     )
-    if is_direct_factor_rolling_archive:
-        _render_factor_rolling_period_switcher(experiment_dir, full_daily, full_signals)
     diagnostics = _build_period_diagnostics(daily, signals)
     _render_workspace(
         daily,
@@ -4800,6 +4823,7 @@ def _render_historical_result_page(experiment_id: str) -> None:
         experiment_dir,
         current_signals=current_display_signals if current_display_signals is not None else full_signals,
         latest_signal_config=latest_signal_config,
+        factor_rolling_periods=(full_daily, full_signals) if is_direct_factor_rolling_archive else None,
     )
 
 

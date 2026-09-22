@@ -13,6 +13,7 @@ import pandas as pd
 
 from common.archive_ids import archive_id_category, existing_short_archive_id, short_archive_id
 from common.strategy_repository import (
+    archive_uid_from_value,
     archive_name_for_strategy_id,
     register_strategy_archive,
     strategy_id_for_archive,
@@ -36,7 +37,7 @@ from strategies.dashboard_signal_v1 import signal_file_for_frequency
 EXPERIMENT_DIR = Path("backtest_outputs") / "experiments"
 EXPERIMENT_INDEX_FILE = Path("backtest_outputs") / "experiments_index.json"
 _EXPERIMENTS_CACHE: dict[str, tuple[tuple[tuple[str, int, int], ...], pd.DataFrame]] = {}
-_EXPERIMENT_INDEX_VERSION = 7
+_EXPERIMENT_INDEX_VERSION = 9
 
 
 def _derived_signal_period_metrics(daily: pd.DataFrame, return_column: str) -> dict[str, object]:
@@ -96,7 +97,8 @@ def _portable_storage_path(root: Path, value: object) -> str:
     The address is deliberately not an identity: a public deployment may use
     ``backtest_outputs/experiments/F026`` while a workstation uses the long
     timestamped directory.  Both rows still point to the same
-    ``strategy_id + archive_name`` pair.
+    ``strategy_id + archive_uid`` pair.  ``archive_name`` is retained only as
+    a portable storage/display address; it is never an index key.
     """
     text = str(value or "").strip()
     if not text:
@@ -110,11 +112,11 @@ def _portable_storage_path(root: Path, value: object) -> str:
     return candidate.as_posix()
 
 
-def _read_archive_identity(root: Path, storage_value: object) -> tuple[str, str]:
-    """Read ``(strategy_id, archive_name)`` from a storage path if available."""
+def _read_archive_identity(root: Path, storage_value: object) -> tuple[str, str, str]:
+    """Read ``(strategy_id, archive_uid, archive_name)`` from storage when needed."""
     storage_text = str(storage_value or "").strip()
     if not storage_text:
-        return "", ""
+        return "", "", ""
     candidate = Path(storage_text)
     if not candidate.is_absolute():
         candidate = Path(root) / candidate
@@ -129,6 +131,7 @@ def _read_archive_identity(root: Path, storage_value: object) -> tuple[str, str]
         pass
     strategy_id = str(manifest.get("short_id") or "").upper().strip()
     archive_name = str(manifest.get("archive_key") or "").strip()
+    archive_uid = str(manifest.get("archive_uid") or "").strip() or archive_uid_from_value(archive_name)
     path_strategy_id = strategy_id_for_archive(root, candidate.name) if candidate.name else None
     if not archive_name and path_strategy_id:
         archive_name = archive_name_for_strategy_id(root, path_strategy_id) or ""
@@ -136,11 +139,18 @@ def _read_archive_identity(root: Path, storage_value: object) -> tuple[str, str]
         strategy_id = path_strategy_id or ""
     if not archive_name and candidate.name and not candidate.name.upper().startswith(tuple("ABCDEFGHIJKLMNOPQRSTUVWXYZ")):
         archive_name = candidate.name
-    return strategy_id, archive_name
+    archive_uid = archive_uid or archive_uid_from_value(archive_name) or archive_uid_from_value(candidate.name) or ""
+    return strategy_id, archive_uid, archive_name
 
 
 def _canonical_identity_row(root: Path, raw: dict[str, object]) -> dict[str, object] | None:
-    """Normalize local and public rows to the same immutable identity schema."""
+    """Normalize an index row to UID identity plus a storage address.
+
+    Legacy rows may carry ``archive_name`` / ``archive_key``.  Those values
+    are accepted only to derive the timestamp UID and are deliberately
+    removed before the row is persisted again: an index must not use an
+    editable title-bearing directory name as a key.
+    """
     normalized = dict(raw)
     storage_value = normalized.get("storage_path") or normalized.get("实验目录") or ""
     strategy_id = str(
@@ -149,31 +159,28 @@ def _canonical_identity_row(root: Path, raw: dict[str, object]) -> dict[str, obj
     archive_name = str(
         normalized.get("archive_name") or normalized.get("archive_key") or ""
     ).strip()
-    if not strategy_id or not archive_name:
-        path_strategy_id, path_archive_name = _read_archive_identity(root, storage_value)
+    archive_uid = str(normalized.get("archive_uid") or "").strip() or archive_uid_from_value(archive_name) or ""
+    if not strategy_id or not archive_uid:
+        path_strategy_id, path_archive_uid, path_archive_name = _read_archive_identity(root, storage_value)
         strategy_id = strategy_id or path_strategy_id
+        archive_uid = archive_uid or path_archive_uid
         archive_name = archive_name or path_archive_name
-    if strategy_id and not archive_name:
+    # A current index already carries a storage address.  Do not perform a
+    # per-row SQLite reverse lookup merely to recover a legacy display folder
+    # name: that turned a 405-row history table into hundreds of connections.
+    if strategy_id and not archive_name and not storage_value:
         archive_name = archive_name_for_strategy_id(root, strategy_id) or ""
     if archive_name and not strategy_id:
         strategy_id = strategy_id_for_archive(root, archive_name) or ""
-    if not strategy_id or not archive_name:
+    if not strategy_id or not archive_uid:
         return None
-    # When the immutable SQLite repository is available, an index row must
-    # agree with it.  This prevents a copied/edited JSON index from silently
-    # reassigning an existing strategy ID or long archive name.
-    registered_id = strategy_id_for_archive(root, archive_name)
-    if registered_id and registered_id != strategy_id:
-        raise ValueError(f"策略 ID 已被篡改：{archive_name} 保存为 {strategy_id}，注册表为 {registered_id}")
-    registered_archive = archive_name_for_strategy_id(root, strategy_id)
-    if registered_archive and registered_archive != archive_name:
-        raise ValueError(f"长归档已被篡改：{strategy_id} 保存为 {archive_name}，注册表为 {registered_archive}")
     storage_path = _portable_storage_path(root, storage_value)
-    if not storage_path:
+    if not storage_path and archive_name:
         storage_path = (EXPERIMENT_DIR / archive_name).as_posix()
     normalized["strategy_id"] = strategy_id
-    normalized["archive_name"] = archive_name
-    normalized["archive_key"] = archive_name
+    normalized["archive_uid"] = archive_uid
+    normalized.pop("archive_name", None)
+    normalized.pop("archive_key", None)
     normalized["storage_path"] = storage_path
     # Keep the legacy field for old UI code, but make it an address only.
     normalized["运行ID"] = strategy_id
@@ -182,14 +189,14 @@ def _canonical_identity_row(root: Path, raw: dict[str, object]) -> dict[str, obj
 
 
 def _normalise_index_rows(root: Path, rows: list[object]) -> list[dict[str, object]]:
-    """Normalize aliases and reject any identity collision.
+    """Normalize aliases and reject collisions using keys only.
 
-    ``strategy_id`` and ``archive_name`` are both immutable keys.  A path is
-    only a current-environment storage address and is therefore never used to
-    decide whether two rows represent the same strategy.
+    ``archive_uid`` is the cross-machine identity. ``strategy_id`` must be
+    unique inside this repository. Names are discarded from the persisted
+    index and paths are storage addresses only, never collision keys.
     """
-    by_identity: dict[str, dict[str, object]] = {}
-    archive_owners: dict[str, str] = {}
+    by_uid: dict[str, dict[str, object]] = {}
+    id_owners: dict[str, str] = {}
     for raw in rows:
         if not isinstance(raw, dict):
             continue
@@ -197,15 +204,15 @@ def _normalise_index_rows(root: Path, rows: list[object]) -> list[dict[str, obje
         if normalized is None:
             continue
         identifier = str(normalized["strategy_id"])
-        archive_name = str(normalized["archive_name"])
-        previous_archive = by_identity.get(identifier)
-        if previous_archive is not None and str(previous_archive["archive_name"]) != archive_name:
-            raise ValueError(f"策略 ID 冲突：{identifier} 同时绑定 {previous_archive['archive_name']} 与 {archive_name}")
-        previous_id = archive_owners.setdefault(archive_name, identifier)
-        if previous_id != identifier:
-            raise ValueError(f"长归档冲突：{archive_name} 同时绑定 {previous_id} 与 {identifier}")
-        by_identity[identifier] = normalized
-    return list(by_identity.values())
+        archive_uid = str(normalized["archive_uid"])
+        previous = by_uid.get(archive_uid)
+        if previous is not None and str(previous["strategy_id"]) != identifier:
+            raise ValueError(f"唯一归档键冲突：{archive_uid} 同时绑定 {previous['strategy_id']} 与 {identifier}")
+        previous_uid = id_owners.setdefault(identifier, archive_uid)
+        if previous_uid != archive_uid:
+            raise ValueError(f"策略 ID 冲突：{identifier} 同时绑定 {previous_uid} 与 {archive_uid}")
+        by_uid[archive_uid] = normalized
+    return list(by_uid.values())
 
 
 def archive_dashboard_experiment(
@@ -255,6 +262,7 @@ def archive_dashboard_experiment(
         # The timestamped folder is storage addressing only.  ``short_id`` is
         # the immutable and globally unique strategy identity shown to users.
         "archive_key": output_dir.name,
+        "archive_uid": archive_uid_from_value(output_dir.name),
         "short_id": display_id,
         "short_id_prefix": prefix,
         "策略名称": config.name,
@@ -437,23 +445,21 @@ def list_experiments(root: Path) -> pd.DataFrame:
     try:
         cached_payload = json.loads(index_path.read_text(encoding="utf-8"))
         cached_rows = cached_payload.get("rows", []) if isinstance(cached_payload, dict) else []
-        # Version 4 includes the complete trade-metric columns, a documented
-        # training window, and the BP-denominated capital-gain drawdown for
-        # the out-of-sample slice.
-        # documented out-of-sample slice used by the history table.  Version 2
-        # appended new archives with those OOS fields hard-coded to blank.
-        # home snapshot.  Older indexes were append-only and left fields such
-        # as annualized BP and winning/closed counts blank for newly archived
-        # factor routes; rebuild them once rather than displaying false
-        # "暂无" values.
+        # Version 9 adds the timestamp-only archive UID and removes
+        # title-bearing archive directory keys. Version 6/7/8 rows
+        # already contain the canonical long archive value, so upgrade them
+        # in memory without opening every archive's result file.  Rebuilding
+        # trade metrics during a page request is the main source of history
+        # page stalls and is deliberately reserved for a missing/corrupt
+        # index, not a schema-only upgrade.
         required_columns = {"年化资本利得_BP", "盈利交易数", "已平仓交易数", "样本训练区间", "样本外最大回撤_BP"}
         cache_version = cached_payload.get("version") if isinstance(cached_payload, dict) else None
-        schema_ok = cache_version == _EXPERIMENT_INDEX_VERSION and all(
+        schema_ok = cache_version in {6, 7, 8, _EXPERIMENT_INDEX_VERSION} and all(
             isinstance(row, dict) and required_columns.issubset(row.keys()) for row in cached_rows
         )
         if isinstance(cached_rows, list) and schema_ok:
             normalized_rows = _normalise_index_rows(root, cached_rows)
-            if len(normalized_rows) != len(cached_rows):
+            if cache_version != _EXPERIMENT_INDEX_VERSION or normalized_rows != cached_rows:
                 _write_experiment_index(root, pd.DataFrame(normalized_rows))
             result = pd.DataFrame(normalized_rows)
             return result.sort_values("运行时间", ascending=False).reset_index(drop=True) if not result.empty else result
@@ -496,6 +502,7 @@ def list_experiments(root: Path) -> pd.DataFrame:
             {
                 "运行ID": short_id,
                 "strategy_id": short_id,
+                "archive_uid": str(manifest.get("archive_uid") or archive_uid_from_value(manifest.get("archive_key") or manifest_path.parent.name) or ""),
                 "archive_name": str(manifest.get("archive_key") or manifest_path.parent.name),
                 "archive_key": str(manifest.get("archive_key") or manifest_path.parent.name),
                 "storage_path": _portable_storage_path(root, manifest_path.parent),
@@ -586,7 +593,8 @@ def _append_experiment_index(
         return
     archive_path = _canonical_archive_path(root, output_dir)
     rows = _normalise_index_rows(root, rows)
-    rows = [row for row in rows if str(row.get("实验目录", "")) != archive_path]
+    archive_uid = str(manifest.get("archive_uid") or archive_uid_from_value(manifest.get("archive_key") or Path(output_dir).name) or "")
+    rows = [row for row in rows if str(row.get("archive_uid", "")) != archive_uid]
     prefix = _manifest_id_prefix(manifest)
     registered_id = existing_short_archive_id(root, archive_id_category(prefix), Path(output_dir).name)
     manifest_id = str(manifest.get("short_id", "")).strip()
@@ -596,14 +604,14 @@ def _append_experiment_index(
     if archive_id:
         for row in rows:
             if str(row.get("运行ID", "")).strip() == archive_id:
-                raise ValueError(f"运行 ID 冲突：{archive_id} 已属于 {row.get('实验目录')}")
+                raise ValueError(f"运行 ID 冲突：{archive_id} 已属于唯一归档键 {row.get('archive_uid', '未登记')}")
     research_range = manifest.get("研究区间", {})
     training_end = _archive_training_end(output_dir, research_range)
     training_range = _archive_training_range(output_dir, research_range)
     out_of_sample_metrics = _archived_out_of_sample_metrics(output_dir, training_end)
     archive_name = str(manifest.get("archive_key") or output_dir.name)
     rows.append({
-        "运行ID": archive_id, "strategy_id": archive_id,
+        "运行ID": archive_id, "strategy_id": archive_id, "archive_uid": archive_uid,
         "archive_name": archive_name, "archive_key": archive_name,
         "storage_path": _portable_storage_path(root, output_dir),
         "运行时间": manifest.get("运行时间", ""),
