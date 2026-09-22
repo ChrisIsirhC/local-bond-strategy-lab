@@ -35,12 +35,38 @@ from common.result_store import (
     read_rolling_reproduction_manifest,
     write_rolling_reproduction_bundle,
 )
-from common.strategy_repository import (
-    archive_uid_for_archive,
-    favorite_archive_uids,
-    set_archive_favorite,
-    strategy_id_for_archive,
-)
+from common import strategy_repository as _strategy_repository
+
+# Streamlit Cloud can briefly serve an older cached ``common`` module while
+# the app file has already been refreshed.  Import the module once and resolve
+# the UID-aware APIs with compatibility fallbacks so a transient version skew
+# cannot prevent the whole application from starting.
+strategy_id_for_archive = _strategy_repository.strategy_id_for_archive
+
+
+def archive_uid_for_archive(root: Path, archive_name: object) -> str | None:
+    resolver = getattr(_strategy_repository, "archive_uid_for_archive", None)
+    if callable(resolver):
+        return resolver(root, archive_name)
+    return str(archive_name).strip() or None
+
+
+def favorite_archive_uids(root: Path) -> set[str]:
+    resolver = getattr(_strategy_repository, "favorite_archive_uids", None)
+    if callable(resolver):
+        return set(resolver(root))
+    legacy = getattr(_strategy_repository, "favorite_strategy_ids", None)
+    return set(legacy(root)) if callable(legacy) else set()
+
+
+def set_archive_favorite(root: Path, archive_uid: object, favorite: bool) -> bool:
+    setter = getattr(_strategy_repository, "set_archive_favorite", None)
+    if callable(setter):
+        return bool(setter(root, archive_uid, favorite))
+    legacy_setter = getattr(_strategy_repository, "set_strategy_favorite", None)
+    if callable(legacy_setter):
+        return bool(legacy_setter(root, str(archive_uid), favorite))
+    return False
 from common.provenance import (
     MISSING_PROVENANCE,
     UNKNOWN_HISTORY,
