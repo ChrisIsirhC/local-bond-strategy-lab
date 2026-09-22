@@ -313,8 +313,13 @@ def _portable_archive_name(value: object) -> str:
 
 
 @lru_cache(maxsize=16)
-def _archive_uid_index_lookup(root_text: str, index_mtime_ns: int) -> dict[str, str]:
-    """Cache compact-ID/UID resolution for lightweight public archives."""
+def _archive_index_lookup(root_text: str, index_mtime_ns: int) -> dict[str, tuple[str, str]]:
+    """Cache compact/local archive identifiers from one index read.
+
+    This is intentionally the only identity lookup used while painting large
+    strategy pickers.  Calling SQLite once per option made every page that
+    exposes a baseline selector feel slow on its first render.
+    """
     del index_mtime_ns  # The argument invalidates this cache when the index changes.
     path = Path(root_text) / "backtest_outputs" / "experiments_index.json"
     try:
@@ -322,12 +327,13 @@ def _archive_uid_index_lookup(root_text: str, index_mtime_ns: int) -> dict[str, 
         rows = payload.get("rows", []) if isinstance(payload, dict) else []
     except (OSError, json.JSONDecodeError):
         return {}
-    lookup: dict[str, str] = {}
+    lookup: dict[str, tuple[str, str]] = {}
     for row in rows:
         if not isinstance(row, dict):
             continue
         archive_uid = str(row.get("archive_uid") or "").strip()
-        if not archive_uid:
+        strategy_id = str(row.get("strategy_id") or row.get("运行ID") or "").upper().strip()
+        if not archive_uid or not strategy_id:
             continue
         for value in (
             row.get("strategy_id"), row.get("运行ID"),
@@ -335,8 +341,19 @@ def _archive_uid_index_lookup(root_text: str, index_mtime_ns: int) -> dict[str, 
         ):
             key = str(value or "").upper().strip()
             if key:
-                lookup[key] = archive_uid
+                lookup[key] = (strategy_id, archive_uid)
     return lookup
+
+
+def _archive_index_record(experiment_dir: Path | str | object) -> tuple[str, str] | None:
+    archive_name = _portable_archive_name(experiment_dir)
+    if not archive_name:
+        return None
+    index_path = ROOT / "backtest_outputs" / "experiments_index.json"
+    try:
+        return _archive_index_lookup(str(ROOT.resolve()), int(index_path.stat().st_mtime_ns)).get(archive_name.upper())
+    except OSError:
+        return None
 
 
 def _archive_presentation_key(experiment_dir: Path | str | object) -> str:
@@ -347,14 +364,9 @@ def _archive_presentation_key(experiment_dir: Path | str | object) -> str:
     # Public compact directories can be intentionally minimal.  The history
     # index still carries their immutable UID, so a bookmark must not depend
     # on a local SQLite copy or on a title-bearing folder name.
-    index_path = ROOT / "backtest_outputs" / "experiments_index.json"
-    try:
-        lookup = _archive_uid_index_lookup(str(ROOT.resolve()), int(index_path.stat().st_mtime_ns))
-        indexed = lookup.get(archive_name.upper())
-        if indexed:
-            return indexed
-    except OSError:
-        pass
+    indexed = _archive_index_record(archive_name)
+    if indexed:
+        return indexed[1]
     registered = archive_uid_for_archive(ROOT, archive_name)
     if registered:
         return registered
@@ -500,6 +512,9 @@ def _set_experiment_note(experiment_dir: Path, note: object) -> None:
 
 def _archive_run_id(experiment_dir: Path) -> str | None:
     archive_name = _portable_archive_name(experiment_dir)
+    indexed = _archive_index_record(archive_name)
+    if indexed:
+        return indexed[0]
     # This is the canonical read-only identity lookup.  It supports both the
     # legacy timestamped local archive directory and public short-ID folders.
     registered_identity = strategy_id_for_archive(ROOT, archive_name)
