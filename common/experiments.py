@@ -786,9 +786,14 @@ def _archived_strategy_trade_metrics(experiment_dir: Path) -> dict[str, object]:
         strategy_metrics = capital_gain_trade_metrics(frame, "strategy_capital_bp", position_col="仓位")
         benchmark_position_col = "comparison_position" if "comparison_position" in frame else None
         benchmark_metrics = capital_gain_trade_metrics(frame, "benchmark_capital_bp", position_col=benchmark_position_col)
-        benchmark_nav = pd.to_numeric(frame.get("基准净值"), errors="coerce")
+        # Normalize scalar and Series forms from legacy archives before vectorized drawdown operations.
+        benchmark_source = frame["基准净值"] if "基准净值" in frame.columns else None
+        benchmark_nav = pd.to_numeric(benchmark_source, errors="coerce")
+        if not isinstance(benchmark_nav, pd.Series):
+            benchmark_nav = pd.Series([benchmark_nav], dtype="float64")
+        benchmark_nav = benchmark_nav.dropna()
         benchmark_max_drawdown = None
-        if benchmark_nav is not None and benchmark_nav.notna().any():
+        if not benchmark_nav.empty:
             benchmark_max_drawdown = float((benchmark_nav / benchmark_nav.cummax() - 1.0).min())
         return {
             **strategy_metrics,
