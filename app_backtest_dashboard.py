@@ -134,10 +134,13 @@ def _all_strategy_config_paths_cached(
     include_factor_archives: bool,
     signature: tuple[tuple[str, int, int], ...],
 ) -> tuple[str, ...]:
-    del signature
-    paths: list[Path] = [Path(item[0]) for item in _config_catalog_signature()]
+    # ``signature`` is both the cache key and the complete candidate list.
+    # Do not refer to the outer function's local ``candidates`` here: cached
+    # functions execute independently on a cache miss.
+    paths: list[Path] = []
     seen: set[str] = set()
-    for path in candidates:
+    for path_text, _mtime_ns, _size in signature:
+        path = Path(path_text)
         resolved = str(path.resolve())
         if resolved in seen:
             continue
