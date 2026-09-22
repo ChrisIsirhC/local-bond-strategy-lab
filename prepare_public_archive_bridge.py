@@ -15,6 +15,7 @@ import shutil
 import sqlite3
 from pathlib import Path
 
+from common.experiments import _normalise_index_rows
 from common.strategy_repository import strategy_id_for_archive
 
 
@@ -24,7 +25,8 @@ def bridge(root: Path, strategy_id: str, *, base_index: Path | None = None) -> P
     index_path = root / "backtest_outputs" / "experiments_index.json"
     local_payload = json.loads(index_path.read_text(encoding="utf-8"))
     local_rows = local_payload.get("rows", []) if isinstance(local_payload, dict) else []
-    row = next((item for item in local_rows if str(item.get("运行ID", "")).upper() == normalized_id), None)
+    local_rows = _normalise_index_rows(root, local_rows)
+    row = next((item for item in local_rows if str(item.get("strategy_id") or item.get("运行ID", "")).upper() == normalized_id), None)
     if not isinstance(row, dict):
         raise ValueError(f"历史索引未找到策略 {normalized_id}")
     source = Path(str(row.get("实验目录", "")))
@@ -77,47 +79,23 @@ def bridge(root: Path, strategy_id: str, *, base_index: Path | None = None) -> P
         # long path with workstation-specific paths.
         payload = json.loads(Path(base_index).read_text(encoding="utf-8"))
         rows = payload.get("rows", []) if isinstance(payload, dict) else []
-        # Normalize every public row with its immutable long archive key.  Old
-        # deployments only stored ``实验目录=.../<short-id>``; their manifest
-        # still carries ``archive_key`` and is the authoritative bridge back
-        # to the timestamped local directory.
-        for item in rows:
-            if not isinstance(item, dict):
-                continue
-            archive_name = str(item.get("archive_name") or item.get("archive_key") or "").strip()
-            if not archive_name:
-                compact = root / str(item.get("实验目录", "")).replace("\\", "/")
-                manifest = compact / "run_manifest.json"
-                try:
-                    manifest_payload = json.loads(manifest.read_text(encoding="utf-8"))
-                except (OSError, json.JSONDecodeError):
-                    manifest_payload = {}
-                archive_name = str(manifest_payload.get("archive_key") or "").strip()
-            if not archive_name:
-                # Older compact manifests predate ``archive_key``.  The
-                # repository database remains the authoritative reverse map.
-                try:
-                    with sqlite3.connect(root / "backtest_outputs" / "strategy_metadata.sqlite") as connection:
-                        found = connection.execute(
-                            "SELECT archive_name FROM strategy_identity WHERE strategy_id = ?",
-                            (str(item.get("运行ID", "")).upper().strip(),),
-                        ).fetchone()
-                    archive_name = str(found[0]).strip() if found else ""
-                except sqlite3.Error:
-                    archive_name = ""
-            if archive_name:
-                item["archive_name"] = archive_name
-                item["archive_key"] = archive_name
-        rows = [item for item in rows if str(item.get("运行ID", "")).upper() != normalized_id]
+        rows = _normalise_index_rows(root, rows)
+        rows = [item for item in rows if str(item.get("strategy_id") or item.get("运行ID", "")).upper() != normalized_id]
         public_row = dict(row)
         public_row["实验目录"] = str(target.relative_to(root)).replace("\\", "/")
+        public_row["storage_path"] = public_row["实验目录"]
+        public_row["strategy_id"] = normalized_id
+        public_row["运行ID"] = normalized_id
         # Keep the immutable, timestamped archive identity beside the compact
         # public entry point.  ``strategy_id`` is the stable lookup key, while
         # ``archive_name`` disambiguates copies between local and remote
         # workspaces and lets an importer verify that they are the same run.
-        public_row["archive_name"] = source.name
-        public_row["archive_key"] = source.name
+        canonical_archive_name = str(row.get("archive_name") or source.name).strip()
+        public_row["archive_name"] = canonical_archive_name
+        public_row["archive_key"] = canonical_archive_name
         rows.append(public_row)
+        rows = _normalise_index_rows(root, rows)
+        payload["version"] = 7
         payload["rows"] = rows
         index_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=True) + "\n", encoding="utf-8")
     # Without a base index, keep the long archive path exactly as-is.  The

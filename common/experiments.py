@@ -12,7 +12,11 @@ from typing import Any
 import pandas as pd
 
 from common.archive_ids import archive_id_category, existing_short_archive_id, short_archive_id
-from common.strategy_repository import register_strategy_archive
+from common.strategy_repository import (
+    archive_name_for_strategy_id,
+    register_strategy_archive,
+    strategy_id_for_archive,
+)
 from common.result_store import (
     read_archive_frame,
     write_result_frame,
@@ -32,7 +36,7 @@ from strategies.dashboard_signal_v1 import signal_file_for_frequency
 EXPERIMENT_DIR = Path("backtest_outputs") / "experiments"
 EXPERIMENT_INDEX_FILE = Path("backtest_outputs") / "experiments_index.json"
 _EXPERIMENTS_CACHE: dict[str, tuple[tuple[tuple[str, int, int], ...], pd.DataFrame]] = {}
-_EXPERIMENT_INDEX_VERSION = 6
+_EXPERIMENT_INDEX_VERSION = 7
 
 
 def _derived_signal_period_metrics(daily: pd.DataFrame, return_column: str) -> dict[str, object]:
@@ -86,30 +90,122 @@ def _canonical_archive_path(root: Path, value: object) -> str:
     return os.path.normcase(str(candidate.resolve()))
 
 
+def _portable_storage_path(root: Path, value: object) -> str:
+    """Return a repository-relative storage address when possible.
+
+    The address is deliberately not an identity: a public deployment may use
+    ``backtest_outputs/experiments/F026`` while a workstation uses the long
+    timestamped directory.  Both rows still point to the same
+    ``strategy_id + archive_name`` pair.
+    """
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    candidate = Path(text)
+    if candidate.is_absolute():
+        try:
+            return candidate.resolve().relative_to(Path(root).resolve()).as_posix()
+        except ValueError:
+            return os.path.normcase(str(candidate.resolve()))
+    return candidate.as_posix()
+
+
+def _read_archive_identity(root: Path, storage_value: object) -> tuple[str, str]:
+    """Read ``(strategy_id, archive_name)`` from a storage path if available."""
+    storage_text = str(storage_value or "").strip()
+    if not storage_text:
+        return "", ""
+    candidate = Path(storage_text)
+    if not candidate.is_absolute():
+        candidate = Path(root) / candidate
+    candidate = candidate.resolve()
+    manifest_path = candidate / "run_manifest.json"
+    manifest: dict[str, object] = {}
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if isinstance(payload, dict):
+            manifest = payload
+    except (OSError, json.JSONDecodeError):
+        pass
+    strategy_id = str(manifest.get("short_id") or "").upper().strip()
+    archive_name = str(manifest.get("archive_key") or "").strip()
+    path_strategy_id = strategy_id_for_archive(root, candidate.name) if candidate.name else None
+    if not archive_name and path_strategy_id:
+        archive_name = archive_name_for_strategy_id(root, path_strategy_id) or ""
+    if not strategy_id:
+        strategy_id = path_strategy_id or ""
+    if not archive_name and candidate.name and not candidate.name.upper().startswith(tuple("ABCDEFGHIJKLMNOPQRSTUVWXYZ")):
+        archive_name = candidate.name
+    return strategy_id, archive_name
+
+
+def _canonical_identity_row(root: Path, raw: dict[str, object]) -> dict[str, object] | None:
+    """Normalize local and public rows to the same immutable identity schema."""
+    normalized = dict(raw)
+    storage_value = normalized.get("storage_path") or normalized.get("实验目录") or ""
+    strategy_id = str(
+        normalized.get("strategy_id") or normalized.get("运行ID") or normalized.get("short_id") or ""
+    ).upper().strip()
+    archive_name = str(
+        normalized.get("archive_name") or normalized.get("archive_key") or ""
+    ).strip()
+    if not strategy_id or not archive_name:
+        path_strategy_id, path_archive_name = _read_archive_identity(root, storage_value)
+        strategy_id = strategy_id or path_strategy_id
+        archive_name = archive_name or path_archive_name
+    if strategy_id and not archive_name:
+        archive_name = archive_name_for_strategy_id(root, strategy_id) or ""
+    if archive_name and not strategy_id:
+        strategy_id = strategy_id_for_archive(root, archive_name) or ""
+    if not strategy_id or not archive_name:
+        return None
+    # When the immutable SQLite repository is available, an index row must
+    # agree with it.  This prevents a copied/edited JSON index from silently
+    # reassigning an existing strategy ID or long archive name.
+    registered_id = strategy_id_for_archive(root, archive_name)
+    if registered_id and registered_id != strategy_id:
+        raise ValueError(f"策略 ID 已被篡改：{archive_name} 保存为 {strategy_id}，注册表为 {registered_id}")
+    registered_archive = archive_name_for_strategy_id(root, strategy_id)
+    if registered_archive and registered_archive != archive_name:
+        raise ValueError(f"长归档已被篡改：{strategy_id} 保存为 {archive_name}，注册表为 {registered_archive}")
+    storage_path = _portable_storage_path(root, storage_value)
+    if not storage_path:
+        storage_path = (EXPERIMENT_DIR / archive_name).as_posix()
+    normalized["strategy_id"] = strategy_id
+    normalized["archive_name"] = archive_name
+    normalized["archive_key"] = archive_name
+    normalized["storage_path"] = storage_path
+    # Keep the legacy field for old UI code, but make it an address only.
+    normalized["运行ID"] = strategy_id
+    normalized["实验目录"] = _canonical_archive_path(root, storage_path)
+    return normalized
+
+
 def _normalise_index_rows(root: Path, rows: list[object]) -> list[dict[str, object]]:
-    """Collapse aliases of the same archive and reject actual ID collisions."""
-    by_path: dict[str, dict[str, object]] = {}
+    """Normalize aliases and reject any identity collision.
+
+    ``strategy_id`` and ``archive_name`` are both immutable keys.  A path is
+    only a current-environment storage address and is therefore never used to
+    decide whether two rows represent the same strategy.
+    """
+    by_identity: dict[str, dict[str, object]] = {}
+    archive_owners: dict[str, str] = {}
     for raw in rows:
         if not isinstance(raw, dict):
             continue
-        archive_value = raw.get("实验目录", "")
-        if not str(archive_value).strip():
+        normalized = _canonical_identity_row(root, raw)
+        if normalized is None:
             continue
-        normalized = dict(raw)
-        normalized["实验目录"] = _canonical_archive_path(root, archive_value)
-        # Later rows are fresher (for example after an archive repair), so
-        # deliberately retain the last copy of an aliased index entry.
-        by_path[normalized["实验目录"]] = normalized
-    owners: dict[str, str] = {}
-    for row in by_path.values():
-        identifier = str(row.get("运行ID", "")).strip()
-        if not identifier:
-            continue
-        archive_path = str(row["实验目录"])
-        previous = owners.setdefault(identifier, archive_path)
-        if previous != archive_path:
-            raise ValueError(f"运行 ID 冲突：{identifier} 同时指向 {previous} 与 {archive_path}")
-    return list(by_path.values())
+        identifier = str(normalized["strategy_id"])
+        archive_name = str(normalized["archive_name"])
+        previous_archive = by_identity.get(identifier)
+        if previous_archive is not None and str(previous_archive["archive_name"]) != archive_name:
+            raise ValueError(f"策略 ID 冲突：{identifier} 同时绑定 {previous_archive['archive_name']} 与 {archive_name}")
+        previous_id = archive_owners.setdefault(archive_name, identifier)
+        if previous_id != identifier:
+            raise ValueError(f"长归档冲突：{archive_name} 同时绑定 {previous_id} 与 {identifier}")
+        by_identity[identifier] = normalized
+    return list(by_identity.values())
 
 
 def archive_dashboard_experiment(
@@ -399,6 +495,10 @@ def list_experiments(root: Path) -> pd.DataFrame:
         rows.append(
             {
                 "运行ID": short_id,
+                "strategy_id": short_id,
+                "archive_name": str(manifest.get("archive_key") or manifest_path.parent.name),
+                "archive_key": str(manifest.get("archive_key") or manifest_path.parent.name),
+                "storage_path": _portable_storage_path(root, manifest_path.parent),
                 "运行时间": manifest.get("运行时间", ""),
                 "策略名称": manifest.get("策略名称", ""),
                 "运行来源": manifest.get("运行来源", ""),
@@ -456,7 +556,8 @@ def list_experiments(root: Path) -> pd.DataFrame:
 def _write_experiment_index(root: Path, frame: pd.DataFrame) -> None:
     """Persist a rebuildable list index; detailed files remain in each archive."""
     path = root / EXPERIMENT_INDEX_FILE
-    rows = frame.where(pd.notna(frame), None).to_dict(orient="records") if not frame.empty else []
+    raw_rows = frame.where(pd.notna(frame), None).to_dict(orient="records") if not frame.empty else []
+    rows = _normalise_index_rows(root, raw_rows)
     temporary = path.with_suffix(".tmp")
     temporary.write_text(
         json.dumps({"version": _EXPERIMENT_INDEX_VERSION, "rows": rows}, ensure_ascii=False, indent=2, default=_json_default) + "\n",
@@ -500,8 +601,12 @@ def _append_experiment_index(
     training_end = _archive_training_end(output_dir, research_range)
     training_range = _archive_training_range(output_dir, research_range)
     out_of_sample_metrics = _archived_out_of_sample_metrics(output_dir, training_end)
+    archive_name = str(manifest.get("archive_key") or output_dir.name)
     rows.append({
-        "运行ID": archive_id, "运行时间": manifest.get("运行时间", ""),
+        "运行ID": archive_id, "strategy_id": archive_id,
+        "archive_name": archive_name, "archive_key": archive_name,
+        "storage_path": _portable_storage_path(root, output_dir),
+        "运行时间": manifest.get("运行时间", ""),
         "策略名称": manifest.get("策略名称", ""), "运行来源": manifest.get("运行来源", ""),
         "信号频率": manifest.get("信号频率", "周频"), "比较基准": manifest.get("比较基准", "10Y地方政府债"),
         "BP口径": manifest.get("资本利得BP口径", "收益率方向变动BP（不乘久期）"),
