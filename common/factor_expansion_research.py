@@ -144,6 +144,7 @@ def run_expansion_weight_search(
     training_end: str,
     beam_width: int = 160,
     prune: bool = True,
+    cancel_requested: Callable[[], bool] | None = None,
 ) -> tuple[ExpansionResearchConfig, pd.DataFrame]:
     """Search only complete V2 weight configurations.
 
@@ -164,9 +165,16 @@ def run_expansion_weight_search(
     factor_columns = base.factor_columns
     matrix, prepared = _prepare_vectorized_market(multipliers, market, factor_columns)
     group_for_factor = _group_for_factor(factor_columns)
+    def check_cancelled() -> None:
+        if cancel_requested is not None and cancel_requested():
+            from common.rolling_research import RollingResearchCancelled
+            raise RollingResearchCancelled("已按请求终止因子权重搜索")
+
+    check_cancelled()
     if not prune:
         return _run_exhaustive_weight_search(
             base, factor_columns, group_for_factor, matrix, prepared,
+            cancel_requested=cancel_requested,
         )
     survivor_count = min(max(int(beam_width), 32), 64)
     states = _full_weight_start_states(factor_columns, group_for_factor, survivor_count)
@@ -198,6 +206,7 @@ def run_expansion_weight_search(
     survivors = _select_weight_survivors(frame, factor_columns, survivor_count)
     states = {tuple(int(value) for value in row[list(factor_columns)]) for _, row in survivors.iterrows()}
     for step in range(1, MAX_FULL_WEIGHT_REFINEMENT_STEPS + 1):
+        check_cancelled()
         candidates = _transfer_weight_neighbors(states, factor_columns, group_for_factor) - visited
         if not candidates:
             break
@@ -251,11 +260,15 @@ def _run_exhaustive_weight_search(
     groups: dict[str, str],
     matrix: np.ndarray,
     prepared: dict[str, np.ndarray],
+    cancel_requested: Callable[[], bool] | None = None,
 ) -> tuple[ExpansionResearchConfig, pd.DataFrame]:
     """Score the complete feasible universe in bounded vectorized chunks."""
     best_row: pd.Series | None = None
     batch: list[tuple[int, ...]] = []
     for state in _all_full_weight_states(columns, groups):
+        if cancel_requested is not None and cancel_requested():
+            from common.rolling_research import RollingResearchCancelled
+            raise RollingResearchCancelled("已按请求终止因子完整搜索")
         batch.append(state)
         if len(batch) < 4096:
             continue
@@ -280,6 +293,7 @@ def run_expansion_threshold_search(
     weighted: ExpansionResearchConfig,
     training_start: str | None,
     training_end: str,
+    cancel_requested: Callable[[], bool] | None = None,
 ) -> tuple[ExpansionResearchConfig, pd.DataFrame]:
     """Search effective score entry thresholds after weights are fixed."""
     multipliers, _ = _factor_data(
@@ -296,6 +310,9 @@ def run_expansion_threshold_search(
         bearish_values = (15.0, 20.0, 25.0, 30.0, 35.0)
     bullish_values = tuple(sorted({60.0, 65.0, 70.0, 75.0, float(weighted.positions.bullish_threshold)}))
     for bullish, bearish in product(bullish_values, bearish_values):
+        if cancel_requested is not None and cancel_requested():
+            from common.rolling_research import RollingResearchCancelled
+            raise RollingResearchCancelled("已按请求终止因子阈值搜索")
         if bearish >= bullish:
             continue
         policy = replace(weighted.positions, bullish_threshold=bullish, bearish_threshold=bearish)
@@ -492,9 +509,13 @@ def run_expansion_rolling_research(
             weighted, _ = run_expansion_weight_search(
                 root, base, None, train_end.date().isoformat(),
                 beam_width=beam_width, prune=prune,
+                cancel_requested=cancel_requested,
             )
             check_cancelled()
-            selected, _ = run_expansion_threshold_search(root, weighted, None, train_end.date().isoformat())
+            selected, _ = run_expansion_threshold_search(
+                root, weighted, None, train_end.date().isoformat(),
+                cancel_requested=cancel_requested,
+            )
             check_cancelled()
         if replay.empty and base.factor_version == "扩展因子" and set(BASE_FACTOR_COLUMNS).issubset(base.factor_columns):
             matching = pd.DataFrame()
@@ -523,10 +544,12 @@ def run_expansion_rolling_research(
                 original_weighted, _ = run_expansion_weight_search(
                     root, original_base, None, train_end.date().isoformat(),
                     beam_width=beam_width, prune=prune,
+                    cancel_requested=cancel_requested,
                 )
                 check_cancelled()
                 original, _ = run_expansion_threshold_search(
                     root, original_weighted, None, train_end.date().isoformat(),
+                    cancel_requested=cancel_requested,
                 )
                 check_cancelled()
             else:
