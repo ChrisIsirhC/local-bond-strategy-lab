@@ -34,7 +34,12 @@ from common.result_store import (
     read_rolling_reproduction_manifest,
     write_rolling_reproduction_bundle,
 )
-from common.strategy_repository import archive_name_for_strategy_id, strategy_id_for_archive
+from common.strategy_repository import (
+    archive_name_for_strategy_id,
+    favorite_strategy_ids,
+    set_strategy_favorite,
+    strategy_id_for_archive,
+)
 from common.provenance import (
     MISSING_PROVENANCE,
     UNKNOWN_HISTORY,
@@ -225,18 +230,29 @@ def _favorite_experiment_ids() -> set[str]:
     or unavailable on Streamlit Cloud; SQLite remains a fallback for local
     archives not yet present in the public index.
     """
+    # SQLite is the authoritative local presentation store.  The legacy JSON
+    # remains a deployed-data compatibility layer: public packages can still
+    # ship existing favorites even before their metadata database is rebuilt.
+    resolved = set(favorite_strategy_ids(ROOT))
+    try:
+        runtime_overrides = st.session_state.get("_favorite_overrides", {})
+    except Exception:
+        runtime_overrides = {}
+    if isinstance(runtime_overrides, dict):
+        resolved.update(str(key) for key, value in runtime_overrides.items() if value)
+        resolved.difference_update(str(key) for key, value in runtime_overrides.items() if not value)
+
     path = ROOT / FAVORITES_FILE
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return set()
+        return {item for item in resolved if item}
     entries = payload.get("experiments", []) if isinstance(payload, dict) else []
     if not isinstance(entries, list):
-        return set()
+        return {item for item in resolved if item}
     saved_names = {_portable_archive_name(entry) for entry in entries if str(entry).strip()}
     if not saved_names:
-        return set()
-    resolved: set[str] = set()
+        return {item for item in resolved if item}
     try:
         index_payload = json.loads((ROOT / "backtest_outputs" / "experiments_index.json").read_text(encoding="utf-8"))
         index_rows = index_payload.get("rows", []) if isinstance(index_payload, dict) else []
@@ -290,6 +306,20 @@ def _set_experiment_favorite(experiment_dir: Path, favorite: bool) -> None:
     if not archive_name:
         return
     presentation_key = _archive_presentation_key(archive_name)
+    # First write the identity-keyed presentation record.  A Cloud container
+    # may discard runtime files after a restart, but this still gives the
+    # active app a single source of truth and does not rely on folder names.
+    set_strategy_favorite(ROOT, presentation_key, favorite)
+    try:
+        overrides = dict(st.session_state.get("_favorite_overrides", {}))
+        overrides[presentation_key] = bool(favorite)
+        st.session_state["_favorite_overrides"] = overrides
+    except Exception:
+        pass
+
+    # Keep the checked-in JSON payload synchronized where the runtime permits
+    # writes.  Failure here must not make an otherwise successful UI click
+    # look like it did nothing (Streamlit Cloud can mount source read-only).
     path = ROOT / FAVORITES_FILE
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -301,13 +331,16 @@ def _set_experiment_favorite(experiment_dir: Path, favorite: bool) -> None:
     if favorite:
         canonical_archive_name = archive_name_for_strategy_id(ROOT, presentation_key) or archive_name
         favorites.append(canonical_archive_name)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(
-        json.dumps({"experiments": sorted(set(favorites))}, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    temporary.replace(path)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(
+            json.dumps({"experiments": sorted(set(favorites))}, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        temporary.replace(path)
+    except OSError:
+        pass
 
 
 def _experiment_display_names() -> dict[str, str]:
@@ -5644,12 +5677,15 @@ def _render_experiment_history(show_report: bool = False) -> None:
     favorite_target = str(st.query_params.get("favorite", "")).strip()
     if favorite_target:
         target_dir = ROOT / "backtest_outputs" / "experiments" / Path(favorite_target).name
-        if (target_dir / "run_manifest.json").exists():
-            requested_state = str(st.query_params.get("favorite_set", "")).strip().lower()
-            if requested_state in {"saved", "empty"}:
-                _set_experiment_favorite(target_dir, requested_state == "saved")
-            else:
-                _set_experiment_favorite(target_dir, _archive_presentation_key(target_dir) not in _favorite_experiment_ids())
+        # Public deployments intentionally package compact result directories
+        # and may omit run_manifest.json.  A bookmark is presentation state,
+        # so it only needs the immutable archive/strategy reference in the
+        # link; requiring a local manifest made online clicks a no-op.
+        requested_state = str(st.query_params.get("favorite_set", "")).strip().lower()
+        if requested_state in {"saved", "empty"}:
+            _set_experiment_favorite(target_dir, requested_state == "saved")
+        else:
+            _set_experiment_favorite(target_dir, _archive_presentation_key(target_dir) not in _favorite_experiment_ids())
         st.query_params.pop("favorite", None)
         st.query_params.pop("favorite_state", None)
         st.query_params.pop("favorite_current", None)

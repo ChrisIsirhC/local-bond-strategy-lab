@@ -347,6 +347,56 @@ def archive_name_for_strategy_id(root: Path, strategy_id: str) -> str | None:
     return _archive_name_by_identifier_lookup(str(Path(root).resolve()), normalized)
 
 
+def favorite_strategy_ids(root: Path) -> set[str]:
+    """Return presentation records explicitly marked as favorites.
+
+    Favorites are presentation metadata, never part of an archive directory
+    name.  Keeping the lookup here makes the short public directory and the
+    long local archive resolve to the same immutable ``strategy_id``.
+    """
+    try:
+        with _connection(Path(root)) as connection:
+            rows = connection.execute(
+                "SELECT strategy_id FROM strategy_presentation WHERE is_favorite = 1"
+            ).fetchall()
+    except (sqlite3.Error, ValueError):
+        return set()
+    return {str(row["strategy_id"]) for row in rows}
+
+
+def set_strategy_favorite(root: Path, strategy_id: str, favorite: bool) -> bool:
+    """Set favorite state for an existing immutable strategy identity.
+
+    Returns ``False`` rather than inventing an identity when the supplied ID
+    is absent.  A caller can then retain its legacy archive-name fallback
+    without ever creating a mutable or duplicate strategy ID.
+    """
+    normalized = str(strategy_id).upper().strip()
+    if not _IDENTIFIER_RE.fullmatch(normalized):
+        return False
+    try:
+        with _connection(Path(root)) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            exists = connection.execute(
+                "SELECT 1 FROM strategy_identity WHERE strategy_id = ?", (normalized,)
+            ).fetchone()
+            if exists is None:
+                return False
+            connection.execute(
+                """
+                INSERT INTO strategy_presentation(strategy_id, is_favorite, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(strategy_id) DO UPDATE SET
+                    is_favorite = excluded.is_favorite,
+                    updated_at = excluded.updated_at
+                """,
+                (normalized, int(bool(favorite)), datetime.now().isoformat(timespec="seconds")),
+            )
+    except (sqlite3.Error, ValueError):
+        return False
+    return True
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
