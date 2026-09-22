@@ -110,14 +110,32 @@ WEIGHT_LABELS = {
 }
 
 
-def _all_strategy_config_paths(*, include_factor_archives: bool = False) -> list[Path]:
+def _config_catalog_signature() -> tuple[tuple[str, int, int], ...]:
+    """Cheap invalidation key for the strategy picker catalog.
+
+    The picker used to parse every archived ``config.json`` on every
+    Streamlit rerun.  A signature lets the cached catalog survive ordinary
+    widget clicks while still invalidating when a config is added or edited.
+    """
     candidates = [
         *sorted((ROOT / CONFIG_DIR).glob("*.json")),
         *sorted((ROOT / CONFIG_DIR / "baselines").glob("*.json")),
         *sorted((ROOT / CONFIG_DIR / "experiments").glob("*.json")),
         *sorted((ROOT / "backtest_outputs" / "experiments").glob("*/config.json")),
     ]
-    paths: list[Path] = []
+    return tuple(
+        (str(path.resolve()), int(path.stat().st_mtime_ns), int(path.stat().st_size))
+        for path in candidates if path.exists()
+    )
+
+
+@st.cache_data(show_spinner=False)
+def _all_strategy_config_paths_cached(
+    include_factor_archives: bool,
+    signature: tuple[tuple[str, int, int], ...],
+) -> tuple[str, ...]:
+    del signature
+    paths: list[Path] = [Path(item[0]) for item in _config_catalog_signature()]
     seen: set[str] = set()
     for path in candidates:
         resolved = str(path.resolve())
@@ -133,11 +151,25 @@ def _all_strategy_config_paths(*, include_factor_archives: bool = False) -> list
             continue
         seen.add(resolved)
         paths.append(path)
-    return paths
+    return tuple(str(path) for path in paths)
+
+
+def _all_strategy_config_paths(*, include_factor_archives: bool = False) -> list[Path]:
+    signature = _config_catalog_signature()
+    return [Path(path) for path in _all_strategy_config_paths_cached(include_factor_archives, signature)]
 
 
 def _is_archived_experiment_config(path: Path) -> bool:
     return path.name == "config.json" and path.parent.parent.name == "experiments" and path.parent.parent.parent.name == "backtest_outputs"
+
+
+@st.cache_data(show_spinner=False)
+def _strategy_config_summary(path_text: str, mtime_ns: int, size: int) -> tuple[str, dict[str, object]]:
+    """Cache the JSON/config parse used by every selectbox label."""
+    del mtime_ns, size
+    config = load_strategy_config(Path(path_text))
+    provenance = config.research_provenance if isinstance(config.research_provenance, dict) else {}
+    return config.name, provenance
 
 
 def _strategy_config_label(path: Path, *, favorites: set[str] | None = None) -> str:
@@ -148,12 +180,17 @@ def _strategy_config_label(path: Path, *, favorites: set[str] | None = None) -> 
     browser-side picker bridge replaces the saved marker with the same orange
     Material bookmark used by result pages.
     """
-    config = load_strategy_config(path)
+    try:
+        stat = path.stat()
+        config_name, provenance = _strategy_config_summary(str(path.resolve()), int(stat.st_mtime_ns), int(stat.st_size))
+    except OSError:
+        config = load_strategy_config(path)
+        config_name, provenance = config.name, config.research_provenance or {}
     marker = "\u00a0\u00a0\u00a0"
     if _is_archived_experiment_config(path):
         is_favorite = _archive_presentation_key(path.parent) in (favorites or set())
         marker = "__local_bond_favorite__" if is_favorite else marker
-        label = _run_display_name(path.parent, config.name)
+        label = _run_display_name(path.parent, config_name)
     elif path.parent.name == "experiments":
         label = f"搜索结果 · {path.stem}"
     elif path.parent.name == "baselines":
@@ -366,7 +403,8 @@ def _set_experiment_favorite(experiment_dir: Path, favorite: bool) -> None:
         pass
 
 
-def _experiment_display_names() -> dict[str, str]:
+@st.cache_data(show_spinner=False)
+def _experiment_display_names_cached(_version: tuple[str, int, int]) -> dict[str, str]:
     """Load aliases keyed by archive UID, including legacy long-folder keys."""
     path = ROOT / DISPLAY_NAMES_FILE
     try:
@@ -381,6 +419,10 @@ def _experiment_display_names() -> dict[str, str]:
         for archive_name, title in names.items()
         if _archive_presentation_key(archive_name) and str(title).strip()
     }
+
+
+def _experiment_display_names() -> dict[str, str]:
+    return _experiment_display_names_cached(_data_file_version(ROOT / DISPLAY_NAMES_FILE))
 
 
 def _normalise_display_name(value: object) -> str:
@@ -409,9 +451,11 @@ def _set_experiment_display_name(experiment_dir: Path, title: object, original_n
         encoding="utf-8",
     )
     temporary.replace(path)
+    _experiment_display_names_cached.clear()
 
 
-def _experiment_notes() -> dict[str, str]:
+@st.cache_data(show_spinner=False)
+def _experiment_notes_cached(_version: tuple[str, int, int]) -> dict[str, str]:
     """Load notes keyed by archive UID, including legacy long-folder keys."""
     path = ROOT / EXPERIMENT_NOTES_FILE
     try:
@@ -426,6 +470,10 @@ def _experiment_notes() -> dict[str, str]:
         for archive_name, note in notes.items()
         if _archive_presentation_key(archive_name) and str(note).strip()
     }
+
+
+def _experiment_notes() -> dict[str, str]:
+    return _experiment_notes_cached(_data_file_version(ROOT / EXPERIMENT_NOTES_FILE))
 
 
 def _set_experiment_note(experiment_dir: Path, note: object) -> None:
@@ -447,6 +495,7 @@ def _set_experiment_note(experiment_dir: Path, note: object) -> None:
         encoding="utf-8",
     )
     temporary.replace(path)
+    _experiment_notes_cached.clear()
 
 
 def _archive_run_id(experiment_dir: Path) -> str | None:
