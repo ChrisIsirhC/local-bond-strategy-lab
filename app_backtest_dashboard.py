@@ -299,6 +299,32 @@ def _favorite_experiment_ids() -> set[str]:
         resolved.update(str(key) for key, value in runtime_overrides.items() if value)
         resolved.difference_update(str(key) for key, value in runtime_overrides.items() if not value)
 
+    # Public deployments may intentionally omit the metadata SQLite database
+    # and may run from a read-only checkout.  In that case the action route
+    # still records the click in the current Streamlit session.  Normalize
+    # those short-ID/path aliases through the compact index so the table and
+    # result-page controls see the same UID immediately.
+    try:
+        index_path = ROOT / "backtest_outputs" / "experiments_index.json"
+        index_rows = _archive_index_rows(index_path)
+    except Exception:
+        index_rows = []
+    for key in list(resolved):
+        normalized_key = _portable_archive_name(key).upper()
+        for row in index_rows:
+            if not isinstance(row, dict):
+                continue
+            uid = str(row.get("archive_uid") or "").strip()
+            identifiers = {
+                str(row.get("strategy_id") or "").upper().strip(),
+                str(row.get("运行ID") or "").upper().strip(),
+                _portable_archive_name(row.get("storage_path") or row.get("实验目录")).upper(),
+                uid.upper(),
+            }
+            if uid and normalized_key in identifiers:
+                resolved.add(uid)
+                break
+
     path = ROOT / FAVORITES_FILE
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -341,6 +367,16 @@ def _portable_archive_name(value: object) -> str:
     return text.rsplit("/", 1)[-1] if text else ""
 
 
+def _archive_index_rows(index_path: Path) -> list[dict[str, object]]:
+    """Read compact archive rows without opening the metadata repository."""
+    try:
+        payload = json.loads(index_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    rows = payload.get("rows", []) if isinstance(payload, dict) else []
+    return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+
+
 @lru_cache(maxsize=16)
 def _archive_index_lookup(root_text: str, index_mtime_ns: int) -> dict[str, tuple[str, str]]:
     """Cache compact/local archive identifiers from one index read.
@@ -367,6 +403,7 @@ def _archive_index_lookup(root_text: str, index_mtime_ns: int) -> dict[str, tupl
         for value in (
             row.get("strategy_id"), row.get("运行ID"),
             _portable_archive_name(row.get("storage_path") or row.get("实验目录")),
+            row.get("archive_uid"),
         ):
             key = str(value or "").upper().strip()
             if key:
@@ -407,7 +444,11 @@ def _set_experiment_favorite(experiment_dir: Path, favorite: bool) -> None:
     archive_name = _portable_archive_name(experiment_dir)
     if not archive_name:
         return
-    presentation_key = _archive_presentation_key(archive_name)
+    # ``archive_name`` is the final fallback for a compact public archive
+    # whose index/SQLite metadata is not present.  It is still session-local
+    # presentation state; immutable identity remains the UID whenever one is
+    # available.
+    presentation_key = _archive_presentation_key(archive_name) or archive_name
     # First write the identity-keyed presentation record. A Cloud container
     # may discard runtime files after a restart, but this still gives the
     # active app a single source of truth and does not rely on folder names.
@@ -415,6 +456,10 @@ def _set_experiment_favorite(experiment_dir: Path, favorite: bool) -> None:
     try:
         overrides = dict(st.session_state.get("_favorite_overrides", {}))
         overrides[presentation_key] = bool(favorite)
+        # Keep the clicked compact ID as an alias too.  This makes a bookmark
+        # immediately visible even if the public index is being rebuilt or a
+        # read-only deployment cannot create/update SQLite.
+        overrides[archive_name] = bool(favorite)
         st.session_state["_favorite_overrides"] = overrides
     except Exception:
         pass
@@ -5213,6 +5258,7 @@ def _render_history_table(display: pd.DataFrame, *, initial_row_count: int | Non
                 continue
             if column == "收藏":
                 is_saved = "favorite_current=saved" in str(value)
+                favorite_uid = _archive_presentation_key(str(row.get("_实验目录", "")))
                 label = "已收藏，点击取消收藏" if is_saved else "收藏"
                 # Do not rely on the Material icon font here.  This table lives
                 # in a Streamlit component iframe, where that font is not
@@ -5235,7 +5281,8 @@ def _render_history_table(display: pd.DataFrame, *, initial_row_count: int | Non
                 saved_class = " is-saved" if is_saved else ""
                 cells.append(
                     f'<td data-column-index="{column_index}" data-sort="{1 if is_saved else 0}"><a class="history-bookmark{saved_class}" '
-                    f'href="{escape(str(value), quote=True)}" aria-label="{label}" title="{label}">{bookmark_svg}</a></td>'
+                    f'href="{escape(str(value), quote=True)}" data-favorite-uid="{escape(favorite_uid, quote=True)}" '
+                    f'aria-label="{label}" title="{label}">{bookmark_svg}</a></td>'
                 )
                 continue
             raw = "" if value is None or pd.isna(value) else str(value)
@@ -5410,6 +5457,36 @@ def _render_history_table(display: pd.DataFrame, *, initial_row_count: int | Non
       const filledBookmark = '<svg class="bookmark-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V5.5Q6 4.675 6.588 4.088Q7.175 3.5 8 3.5H16Q16.825 3.5 17.413 4.088Q18 4.675 18 5.5V21L12 18.425Z"/></svg>';
       const historyStorage = (() => {{ try {{ return window.parent.localStorage; }} catch (_) {{ return null; }} }})();
       const cacheKey = 'local-bond-history-table-complete-v1';
+      // Cloud workers have no durable, shared runtime filesystem.  Preserve
+      // the visible bookmark choice in the browser too, keyed by archive UID;
+      // the hidden writer below still persists it whenever a writable
+      // repository is available. This prevents a successful click from
+      // appearing to do nothing after an ordinary remote page revisit.
+      const favoriteStorageKey = 'local-bond-favorite-overrides-by-uid-v1';
+      const localFavoriteOverrides = (() => {{
+        try {{
+          const saved = historyStorage && JSON.parse(historyStorage.getItem(favoriteStorageKey) || '{{}}');
+          return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {{}};
+        }} catch (_) {{ return {{}}; }}
+      }})();
+      const persistFavoriteOverrides = () => {{
+        if (historyStorage) historyStorage.setItem(favoriteStorageKey, JSON.stringify(localFavoriteOverrides));
+      }};
+      const setBookmarkState = (bookmark, isSaved) => {{
+        bookmark.classList.toggle('is-saved', isSaved);
+        bookmark.innerHTML = isSaved ? filledBookmark : outlineBookmark;
+        bookmark.setAttribute('aria-label', isSaved ? '已收藏，点击取消收藏' : '收藏');
+        bookmark.setAttribute('title', isSaved ? '已收藏，点击取消收藏' : '收藏');
+        const cell = bookmark.closest('td');
+        if (cell) cell.dataset.sort = isSaved ? '1' : '0';
+      }};
+      const applyLocalFavoriteOverrides = (scope = body) => {{
+        scope.querySelectorAll('.history-bookmark[data-favorite-uid]').forEach(bookmark => {{
+          const uid = bookmark.dataset.favoriteUid;
+          if (!uid || !Object.prototype.hasOwnProperty.call(localFavoriteOverrides, uid)) return;
+          setBookmarkState(bookmark, Boolean(localFavoriteOverrides[uid]));
+        }});
+      }};
       const columnStorageKey = 'local-bond-history-table-hidden-columns-v1';
       const columnLayoutStorageKey = 'local-bond-history-table-layout-v1';
       const restoreColumnsButton = document.getElementById('history-restore-columns');
@@ -5617,13 +5694,12 @@ def _render_history_table(display: pd.DataFrame, *, initial_row_count: int | Non
       }});
       body.addEventListener('click', event => {{
         const bookmark = event.target.closest('.history-bookmark');
-        if (bookmark) {{
+          if (bookmark) {{
           event.preventDefault();
-          const isSaved = bookmark.classList.toggle('is-saved');
-          bookmark.innerHTML = isSaved ? filledBookmark : outlineBookmark;
-          bookmark.setAttribute('aria-label', isSaved ? '已收藏，点击取消收藏' : '收藏');
-          bookmark.setAttribute('title', isSaved ? '已收藏，点击取消收藏' : '收藏');
-          bookmark.closest('td').dataset.sort = isSaved ? '1' : '0';
+          const isSaved = !bookmark.classList.contains('is-saved');
+          setBookmarkState(bookmark, isSaved);
+          const uid = bookmark.dataset.favoriteUid;
+          if (uid) {{ localFavoriteOverrides[uid] = isSaved; persistFavoriteOverrides(); }}
           sortRows();
           // Write in a hidden document rather than navigating this component.
           // The visible table stays interactive, so no nested page or whole-page
@@ -5760,15 +5836,16 @@ def _render_history_table(display: pd.DataFrame, *, initial_row_count: int | Non
       }});
       const appendBatch = () => {{
         const batch = deferredRows.splice(0, batchSize);
-        if (batch.length) {{ body.insertAdjacentHTML('beforeend', batch.join('')); applyColumnOrder(); applyFilter(); sortRows(); updateStatus(); window.setTimeout(appendBatch, 45); return; }}
+        if (batch.length) {{ body.insertAdjacentHTML('beforeend', batch.join('')); applyLocalFavoriteOverrides(); applyColumnOrder(); applyFilter(); sortRows(); updateStatus(); window.setTimeout(appendBatch, 45); return; }}
         if (historyStorage) historyStorage.setItem(cacheKey, '1');
         updateStatus();
       }};
       const appendAll = () => {{
-        if (deferredRows.length) {{ body.insertAdjacentHTML('beforeend', deferredRows.splice(0).join('')); applyColumnOrder(); applyFilter(); sortRows(); }}
+        if (deferredRows.length) {{ body.insertAdjacentHTML('beforeend', deferredRows.splice(0).join('')); applyLocalFavoriteOverrides(); applyColumnOrder(); applyFilter(); sortRows(); }}
         updateStatus();
       }};
       applyColumnOrder();
+      applyLocalFavoriteOverrides();
       updateStatus();
       if (deferredRows.length) {{
         if (historyStorage && historyStorage.getItem(cacheKey) === '1') appendAll();

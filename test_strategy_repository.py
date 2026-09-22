@@ -78,6 +78,57 @@ class StrategyRepositoryTests(unittest.TestCase):
                 json.loads((target / "run_manifest.json").read_text(encoding="utf-8"))["short_id"], "F002"
             )
 
+    def test_public_bridge_keeps_custom_name_and_uid_presentation_state(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive_name = "20260922_102030_123456__原始策略"
+            archive_uid = "20260922_102030_123456"
+            ensure_strategy_ids(root, "experiments_F", [archive_name], "F")
+            archive = root / "backtest_outputs" / "experiments" / "F001"
+            archive.mkdir(parents=True)
+            (archive / "config.json").write_text("{}", encoding="utf-8")
+            (archive / "run_manifest.json").write_text(
+                json.dumps({"short_id": "F001", "archive_uid": archive_uid, "策略名称": "原始策略"}),
+                encoding="utf-8",
+            )
+            row = {
+                "运行ID": "F001", "strategy_id": "F001", "archive_uid": archive_uid,
+                "实验目录": "backtest_outputs/experiments/F001", "storage_path": "backtest_outputs/experiments/F001",
+                "策略名称": "原始策略", "运行时间": "", "运行来源": "因子研究", "信号频率": "日频",
+                "比较基准": "10Y", "BP口径": "BP", "回测起始日期": "", "回测结束日期": "",
+                "回测区间": "", "样本训练区间": "", "年化资本利得_BP": None,
+                "盈利交易数": None, "已平仓交易数": None, "样本外最大回撤_BP": None,
+            }
+            output = root / "backtest_outputs"
+            (output / "experiments_index.json").write_text(json.dumps({"version": 9, "rows": [row]}, ensure_ascii=False), encoding="utf-8")
+            (output / "experiment_display_names.json").write_text(
+                json.dumps({"version": 1, "names": {archive_name: "人工修改名称"}}, ensure_ascii=False), encoding="utf-8"
+            )
+            (output / "experiment_notes.json").write_text(
+                json.dumps({"version": 1, "notes": {archive_name: "保留备注"}}, ensure_ascii=False), encoding="utf-8"
+            )
+            (output / "experiment_favorites.json").write_text(
+                json.dumps({"experiments": [archive_name]}, ensure_ascii=False), encoding="utf-8"
+            )
+
+            bridge(root, "F001")
+
+            manifest = json.loads((archive / "run_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["策略名称"], "人工修改名称")
+            self.assertEqual(manifest["原始策略名称"], "原始策略")
+            self.assertEqual(
+                json.loads((output / "experiment_display_names.json").read_text(encoding="utf-8"))["names"][archive_uid],
+                "人工修改名称",
+            )
+            self.assertEqual(
+                json.loads((output / "experiment_notes.json").read_text(encoding="utf-8"))["notes"][archive_uid],
+                "保留备注",
+            )
+            self.assertEqual(
+                json.loads((output / "experiment_favorites.json").read_text(encoding="utf-8"))["experiments"],
+                [archive_uid],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
