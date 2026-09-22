@@ -839,6 +839,7 @@ def main() -> None:
     rolling_page = st.Page(_render_rolling_research_page, title="滚动定参", url_path="rolling")
     factor_research_page = st.Page(_render_factor_research_page, title="因子研究", url_path="factor-research")
     st.session_state["history_navigation_page"] = history_page
+    st.session_state["rolling_navigation_page"] = rolling_page
     st.session_state["factor_research_navigation_page"] = factor_research_page
     selected_page = st.navigation([home_page, history_page, search_page, rolling_page, factor_research_page], position="top")
     selected_page.run()
@@ -3828,7 +3829,7 @@ def _render_factor_expansion_launch_panel() -> None:
                                 status.update(label="剪枝快速验证完成", state="complete", expanded=False)
                             experiment_dir = Path(str(result.get("experiment_dir")))
                             st.success(f"剪枝快速验证已完成：{experiment_dir.name}")
-                            st.page_link(f"/history?experiment={quote(experiment_dir.name)}", label="打开结果", icon="↗")
+                            st.link_button(f"打开结果", f"/history?experiment={quote(experiment_dir.name)}", icon="↗")
                 worker_started = start_rolling_queue_worker(ROOT) if run_scope == "完整滚动定参" else False
             except (OSError, ValueError, TimeoutError) as exc:
                 st.error(f"因子研究执行失败：{exc}")
@@ -3838,7 +3839,9 @@ def _render_factor_expansion_launch_panel() -> None:
                     st.success(f"已加入完整滚动定参：{tasks[0]['task_id']}。")
                 else:
                     st.success(f"已加入 {len(tasks)} 条完整滚动定参任务；队列最多并行 2 个。")
-                st.page_link("/rolling", label="去滚动定参查看队列", icon="↗")
+                rolling_page = st.session_state.get("rolling_navigation_page")
+                if rolling_page is not None:
+                    st.page_link(rolling_page, label="去滚动定参查看队列", icon="↗")
             return
         with st.status("正在生成研究快照...", expanded=True) as status:
             try:
